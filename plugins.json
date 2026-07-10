@@ -10,6 +10,12 @@
       "source": "geysermc",
       "project": "floodgate",
       "preserve": ["plugins/floodgate/key.pem"]
+    },
+    {
+      "name": "ViaVersion",
+      "source": "hangar",
+      "id": "ViaVersion",
+      "version": "latest"
     }
   ]
 }
