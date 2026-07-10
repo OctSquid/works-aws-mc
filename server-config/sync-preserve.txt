@@ -1,0 +1,10 @@
+# sync-dist.sh が dist -> データボリュームへ rsync する際の除外パターン（rsync exclude 形式）。
+# プラグイン固有のセーブデータは plugins.json 側の preserve に書く。ここはプラグイン非依存の共通分。
+# ここに書かれたパスは「サーバー側が正」となり、AMI 更新でも上書きされない。
+world*/
+usercache.json
+banned-ips.json
+banned-players.json
+ops.json
+whitelist.json
+session.lock

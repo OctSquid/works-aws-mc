@@ -1,0 +1,20 @@
+# Git 管理のテンプレート。render-config.sh が @RCON_PASSWORD@ を置換して server.properties を生成する
+motd=AWS on-demand Minecraft server
+online-mode=true
+max-players=20
+view-distance=10
+simulation-distance=10
+difficulty=normal
+gamemode=survival
+spawn-protection=0
+white-list=false
+enforce-secure-profile=true
+
+server-port=25565
+enable-rcon=true
+rcon.port=25575
+rcon.password=@RCON_PASSWORD@
+broadcast-rcon-to-ops=false
+
+enable-query=false
+enable-status=true

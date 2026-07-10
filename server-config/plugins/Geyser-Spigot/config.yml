@@ -1,0 +1,44 @@
+# GeyserMC 設定（Git 管理。バージョンアップで構造が変わった場合はこのファイルを追従させること）
+bedrock:
+  address: 0.0.0.0
+  port: 19132
+  clone-remote-port: false
+  motd1: AWS on-demand Minecraft
+  motd2: Powered by Geyser
+  compression-level: 6
+  enable-proxy-protocol: false
+remote:
+  address: auto
+  port: 25565
+  auth-type: floodgate
+  use-proxy-protocol: false
+  forward-hostname: false
+floodgate-key-file: key.pem
+command-suggestions: true
+passthrough-motd: true
+passthrough-player-counts: true
+legacy-ping-passthrough: false
+ping-passthrough-interval: 3
+forward-player-ping: false
+max-players: 100
+debug-mode: false
+show-cooldown: title
+show-coordinates: true
+disable-bedrock-scaffolding: false
+emote-offhand-workaround: "disabled"
+cache-images: 0
+allow-custom-skulls: true
+max-visible-custom-skulls: 128
+custom-skull-render-distance: 32
+add-non-bedrock-items: true
+above-bedrock-nether-building: false
+force-resource-packs: true
+xbox-achievements-enabled: false
+log-player-ip-addresses: true
+notify-on-new-bedrock-update: true
+unusable-space-block: minecraft:barrier
+metrics:
+  enabled: false
+scoreboard-packet-threshold: 20
+enable-custom-content: true
+config-version: 4

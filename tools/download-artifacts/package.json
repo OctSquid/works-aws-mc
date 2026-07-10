@@ -1,0 +1,15 @@
+{
+  "name": "download-artifacts",
+  "private": true,
+  "type": "module",
+  "description": "server.json / plugins.json を解釈して Paper 本体とプラグイン jar をダウンロードし、dist 用 manifest を生成する",
+  "scripts": {
+    "download": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

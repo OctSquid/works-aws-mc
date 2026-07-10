@@ -1,0 +1,31 @@
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+.terraform.lock.hcl.backup
+terraform/bootstrap/terraform.tfstate*
+
+# Packer
+packer/provision/artifacts/*
+!packer/provision/artifacts/.gitkeep
+*.pkrvars.hcl
+packer_cache/
+
+# Local server data (EBS 相当)
+docker/data*/
+
+# Downloaded artifacts
+artifacts/
+
+# Secrets
+.env
+.env.*
+
+# OS
+.DS_Store

@@ -1,0 +1,7 @@
+[Unit]
+Description=Shut down the server after 15 minutes without players
+After=minecraft.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/minecraft/bin/idle-watchdog.sh

@@ -1,0 +1,79 @@
+name: ami-build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - server.json
+      - plugins.json
+      - "server-config/**"
+      - "packer/**"
+      - "tools/download-artifacts/**"
+      - .github/workflows/ami-build.yml
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+  AMI_KEEP_GENERATIONS: 2
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download Paper + plugins
+        working-directory: tools/download-artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+        run: |
+          npm ci
+          npm run download -- --out ../../packer/provision/artifacts
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/gha-packer
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-packer@v3
+        with:
+          version: "1.12.0"
+
+      - name: Packer build
+        working-directory: packer
+        run: |
+          packer init .
+          packer validate .
+          packer build .
+
+      - name: Update SSM /mc/ami-id
+        working-directory: packer
+        run: |
+          AMI_ID=$(jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d: -f2)
+          echo "New AMI: $AMI_ID"
+          aws ssm put-parameter --name /mc/ami-id --type String --overwrite --value "$AMI_ID"
+
+      - name: Deregister old AMIs (keep newest ${{ env.AMI_KEEP_GENERATIONS }})
+        run: |
+          OLD_AMIS=$(aws ec2 describe-images --owners self \
+            --filters "Name=name,Values=mc-server-*" \
+            --query 'sort_by(Images,&CreationDate)[:-'"$AMI_KEEP_GENERATIONS"'].[ImageId]' --output text)
+          for ami in $OLD_AMIS; do
+            echo "Deregistering $ami"
+            SNAPSHOTS=$(aws ec2 describe-images --image-ids "$ami" \
+              --query 'Images[0].BlockDeviceMappings[].Ebs.SnapshotId' --output text)
+            aws ec2 deregister-image --image-id "$ami"
+            for snap in $SNAPSHOTS; do
+              aws ec2 delete-snapshot --snapshot-id "$snap"
+            done
+          done

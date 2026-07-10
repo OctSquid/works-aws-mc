@@ -1,0 +1,14 @@
+[Unit]
+Description=Minecraft data volume bootstrap (mount, sync dist, render config)
+After=network-online.target cloud-init.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/minecraft/bin/bootstrap-data-volume.sh
+ExecStart=/opt/minecraft/bin/sync-dist.sh
+ExecStart=/opt/minecraft/bin/render-config.sh
+
+[Install]
+WantedBy=multi-user.target

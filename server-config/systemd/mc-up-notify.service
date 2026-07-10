@@ -1,0 +1,11 @@
+[Unit]
+Description=Notify Discord when the Minecraft world has finished loading
+After=minecraft.service
+Requires=minecraft.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/minecraft/bin/mc-up-notify.sh
+
+[Install]
+WantedBy=multi-user.target

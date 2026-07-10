@@ -1,0 +1,20 @@
+[Unit]
+Description=Minecraft Paper server
+After=mc-bootstrap.service
+Requires=mc-bootstrap.service
+
+[Service]
+Type=simple
+User=minecraft
+Group=minecraft
+WorkingDirectory=/srv/minecraft
+ExecStart=/opt/minecraft/bin/mc-start.sh
+ExecStop=/opt/minecraft/bin/rcon.sh stop
+TimeoutStopSec=120
+Restart=on-failure
+RestartSec=10
+# OOM でホストごと巻き込まれないように
+OOMScoreAdjust=200
+
+[Install]
+WantedBy=multi-user.target

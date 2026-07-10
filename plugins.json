@@ -1,0 +1,15 @@
+{
+  "plugins": [
+    {
+      "name": "Geyser-Spigot",
+      "source": "geysermc",
+      "project": "geyser"
+    },
+    {
+      "name": "floodgate",
+      "source": "geysermc",
+      "project": "floodgate",
+      "preserve": ["plugins/floodgate/key.pem"]
+    }
+  ]
+}

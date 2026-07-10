@@ -1,0 +1,5 @@
+# Paper グローバル設定（不足キーは Paper が起動時にデフォルトで補完する）
+misc:
+  fix-entity-position-desync: true
+timings:
+  enabled: false

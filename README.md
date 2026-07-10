@@ -1,0 +1,164 @@
+# aws-mc-server
+
+AWS 上のオンデマンド Minecraft サーバー基盤。Paper + GeyserMC + Floodgate で **Java 版 / Bedrock 版の両方に対応**。
+Discord の Slash Command で必要な時だけスポットインスタンスを起動し、プレイヤーが 15 分間不在なら自動停止・terminate する。ワールドデータは停止時に EBS スナップショットへ退避し、次回起動時に復元する。
+
+- 稼働 30〜100 時間/月で **約 ¥650〜¥1,400/月**（+ ドメイン代 ≈$14/年）
+- すべて IaC（Terraform + Packer）、デプロイは GitHub Actions（OIDC・長期キーなし）
+
+## アーキテクチャ
+
+```
+[Discord] ─/start /stop /status─▶ [Lambda: interactions] (Function URL, 署名検証, deferred応答)
+                                      │ async invoke
+                                      ▼
+                                 [Lambda: command-worker] (DynamoDB で排他・状態機械)
+                                      │ 最安AZのスポットを自動選択して起動 / SSM経由で graceful stop
+                                      ▼
+[EC2 スポット m7a.large] ← Packer製AMI (Paper + Geyser + Floodgate + 設定焼き込み)
+   ├ /srv/minecraft = データ用EBS (停止時スナップショット化 → 起動時復元)
+   └ systemd timer: 15分無人で自動停止
+[EventBridge] ─ スポット中断警告 / terminate / snapshot完了 ─▶ [Lambda: lifecycle 等]
+[Route53] 起動時に A レコード UPSERT (Elastic IP 不使用)
+```
+
+各コンポーネントの詳細設計は `plan.md` を参照。
+
+## リポジトリ構成
+
+| パス | 内容 |
+|---|---|
+| `server.json` | Minecraft/Paper バージョンと JVM ヒープサイズ |
+| `plugins.json` | プラグイン定義（追加はここに 1 エントリ書くだけ） |
+| `server-config/` | サーバー・プラグイン設定、インスタンス上のスクリプト、systemd ユニット |
+| `tools/download-artifacts/` | server.json/plugins.json を解釈して Paper + プラグインを DL |
+| `tools/register-commands/` | Discord Slash Commands 登録 |
+| `packer/` | AMI ビルド定義 |
+| `lambda/` | interactions / command-worker / lifecycle / spot-interruption |
+| `terraform/bootstrap/` | 初回手動 apply（state バケット, GitHub OIDC, CI ロール） |
+| `terraform/envs/prod/` | 本番環境一式 |
+| `docker/` | ローカルテスト環境（本番と同じプロビジョニングスクリプトを使用） |
+
+## 初回セットアップ
+
+### 0. 前提
+
+- `mise install`（aws-cli / terraform / packer / node が入る）
+- AWS アカウントと管理者権限、AWS CLI のプロファイル設定
+- [Minecraft EULA](https://aka.ms/MinecraftEULA) への同意（AMI に `eula=true` を焼き込むため）
+
+### 1. Terraform bootstrap（手動・1回だけ）
+
+```sh
+cd terraform/bootstrap
+terraform init
+terraform apply -var github_repository=<owner>/<repo> -var state_bucket_name=<一意なバケット名>
+```
+
+state バケット・GitHub OIDC プロバイダ・CI 用 IAM ロール（`gha-terraform` / `gha-packer`）が作成される。
+
+### 2. ドメイン取得（Route53）
+
+1. AWS コンソール → Route53 →「ドメインの登録」で取得（`.com` ≈ $14/年）。Hosted Zone が自動作成される
+2. Hosted Zone を Terraform 管理に取り込む:
+   ```sh
+   cd terraform/envs/prod
+   terraform import -var domain_name=<domain> -var budget_email=<email> \
+     module.dns.aws_route53_zone.this <ZONE_ID>
+   ```
+
+### 3. Discord アプリケーション作成
+
+1. [Discord Developer Portal](https://discord.com/developers/applications) で New Application
+2. 控える値: **Application ID**、**Public Key**、Bot タブの **Token**
+3. サーバー（ギルド）に Bot を招待（スコープ `applications.commands` のみで可）
+4. 通知用チャンネルで Webhook を作成し URL を控える
+
+### 4. GitHub リポジトリ設定
+
+- Variables: `AWS_ACCOUNT_ID`, `TF_STATE_BUCKET`, `DISCORD_APPLICATION_ID`, `DISCORD_GUILD_ID`
+- Secrets: `DISCORD_BOT_TOKEN`（CurseForge のプラグインを使う場合は `CURSEFORGE_API_KEY` も）
+
+### 5. シークレットの投入（SSM Parameter Store）
+
+Terraform はプレースホルダでパラメータを作るので、実値を CLI で投入する:
+
+```sh
+aws ssm put-parameter --overwrite --name /mc/discord/public-key --type String --value '<PUBLIC_KEY>'
+aws ssm put-parameter --overwrite --name /mc/discord/bot-token --type SecureString --value '<BOT_TOKEN>'
+aws ssm put-parameter --overwrite --name /mc/discord/webhook-url --type SecureString --value '<WEBHOOK_URL>'
+aws ssm put-parameter --overwrite --name /mc/rcon-password --type SecureString --value "$(openssl rand -hex 24)"
+```
+
+### 6. デプロイ
+
+1. main に push → `terraform.yml` が Lambda ビルド + terraform apply
+2. `ami-build.yml` を手動実行（または server.json 等の変更を push）→ AMI ビルド + SSM `/mc/ami-id` 更新
+3. `discord-commands.yml` を手動実行 → Slash Commands 登録
+4. Terraform 出力の `function_url` を Discord Developer Portal の **Interactions Endpoint URL** に設定
+   （Discord が PING を送って検証するため、Lambda デプロイ後に行うこと）
+
+## 日常運用
+
+| 操作 | 方法 |
+|---|---|
+| サーバー起動 | Discord で `/start`（最も安い AZ×インスタンスタイプのスポットを自動選択） |
+| スポット枯渇時 | `/start ondemand:True` でオンデマンド起動（割高。明示指定のみ） |
+| サーバー停止 | `/stop`（自動でスナップショットバックアップ）。放置でも 15 分無人で自動停止 |
+| 状態確認 | `/status` |
+| プラグイン追加・更新 | `plugins.json` を編集して PR → main マージで AMI 自動再ビルド → 次回 `/start` から反映 |
+| MC バージョンアップ | `server.json` の `minecraft_version` を更新（同上） |
+| サーバー設定変更 | `server-config/` を編集（同上） |
+| 管理コマンド実行 | SSM Session Manager で接続し `sudo /opt/minecraft/bin/rcon.sh <command>`（SSH ポートは開いていない） |
+
+### プラグインの追加方法
+
+`plugins.json` の `plugins` 配列に 1 エントリ追加する。対応ソース: `hangar`（PaperMC 公式・推奨）/ `modrinth` / `github` / `geysermc` / `curseforge`（要 API キー）/ `url` / `local`（手動入手 jar を `server-config/plugins-local/` に置く）。
+
+```jsonc
+{ "name": "VeinMiner", "source": "hangar", "id": "VeinMiner", "version": "latest",
+  "preserve": ["plugins/VeinMiner/*.db"] }
+```
+
+- **`preserve` を必ず検討すること**: プレイヤーデータやセーブ依存ファイルのパターンを書くと、AMI 更新時も上書きされず保持される
+- SpigotMC 配布のみのプラグインは Cloudflare 保護のため自動 DL 不可が多い。`local` ソースを使う
+
+### 設定の上書き・保持ルール
+
+起動時に AMI 内の配布物をデータボリュームへ rsync する（`sync-dist.sh`）:
+
+- **Git が正（常に上書き）**: Paper 本体、プラグイン jar（dist に無い古い jar は削除）、`server-config/` 管理の設定ファイル
+- **サーバーが正（常に保持）**: `world*/`、`usercache.json`、ban/ops/whitelist、`plugins.json` の `preserve` パターン、`server-config/sync-preserve.txt` のパターン
+- dist に存在しないファイル（プラグイン生成データ等）はそもそも触らない（`--delete` 不使用）
+
+## ローカルテスト
+
+```sh
+cd tools/download-artifacts && npm install && npm run download   # artifacts/ を生成
+cd ../../docker && docker compose up --build
+```
+
+- Java 版: `localhost` / Bedrock 版: `localhost:19132`
+  （Windows の Bedrock 版は loopback 制限の解除が必要: `CheckNetIsolation LoopbackExempt -a -n=Microsoft.MinecraftUWP_8wekyb3d8bbwe`）
+- ワールドは `docker/data/` に永続化される。`docker compose down` →再作成でも残ることを確認できる
+- RCON テスト: `docker compose exec minecraft /opt/minecraft/bin/rcon.sh list`
+
+> **注意（Apple Silicon）**: Docker デーモンが x86_64 エミュレーション（colima の x86_64 VM 等）の場合、
+> JVM の JIT が SIGSEGV でクラッシュすることがある。ネイティブ arch の VM（`colima start --arch aarch64 --vm-type vz`
+> や Docker Desktop）を使うこと。応急処置は `JAVA_TOOL_OPTIONS=-Xint`（非常に遅い）。
+
+## 障害時リカバリ
+
+| 症状 | 対応 |
+|---|---|
+| `/start` が「既に操作が進行中」のまま | 15 分待つと状態ロックは奪取可能になる。急ぐ場合は DynamoDB `mc-server-state` の `state` を `STOPPED` に手動更新 |
+| スナップショット作成に失敗した | データはボリュームに残っている（DeleteOnTermination=false）。`mc:data=true` タグの available ボリュームを確認し、次回 `/start` はそのボリュームを再利用する |
+| ワールドを過去時点に戻したい | DynamoDB を STOPPED にした上で、戻したい世代より新しいスナップショット（`mc:data=true`）を削除 → `/start`（最新スナップショットから復元される） |
+| Bedrock 版で入れない | Floodgate の `key.pem` が失われた可能性。スナップショットから復元するか、全 Bedrock プレイヤーの再リンクが必要 |
+| インスタンスに入りたい | `aws ssm start-session --target <instance-id>` |
+
+## コスト管理
+
+- AWS Budgets（月 $15、Terraform 変数で変更可）で 80%/100% 時にメール通知
+- 主なコスト: スポット稼働時間（≈$0.06/h）、EBS スナップショット 7 世代、AMI 2 世代、Route53 zone $0.5/月
+- NAT Gateway / Elastic IP / ALB は使わない（これが低コストの前提。追加しないこと）

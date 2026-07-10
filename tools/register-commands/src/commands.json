@@ -1,0 +1,22 @@
+[
+  {
+    "name": "start",
+    "description": "Minecraft サーバーを起動する（最も安いスポットを自動選択）",
+    "options": [
+      {
+        "type": 5,
+        "name": "ondemand",
+        "description": "スポットが確保できない場合にオンデマンドで起動する",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "stop",
+    "description": "Minecraft サーバーを停止する（ワールドは自動バックアップされます）"
+  },
+  {
+    "name": "status",
+    "description": "Minecraft サーバーの稼働状況を確認する"
+  }
+]

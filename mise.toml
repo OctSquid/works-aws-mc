@@ -1,0 +1,5 @@
+[tools]
+aws-cli = { version = "latest", symlink_bins = "true" }
+terraform = "1.12"
+packer = "1.12"
+node = "22"

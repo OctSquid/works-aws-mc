@@ -1,0 +1,30 @@
+name: discord-commands
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - tools/register-commands/src/commands.json
+      - .github/workflows/discord-commands.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Register slash commands
+        working-directory: tools/register-commands
+        env:
+          DISCORD_APPLICATION_ID: ${{ vars.DISCORD_APPLICATION_ID }}
+          DISCORD_GUILD_ID: ${{ vars.DISCORD_GUILD_ID }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        run: |
+          npm install
+          npm run register

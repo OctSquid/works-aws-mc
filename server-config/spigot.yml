@@ -1,0 +1,7 @@
+settings:
+  bungeecord: false
+  restart-on-crash: false
+messages:
+  server-full: サーバーが満員です
+players:
+  disable-saving: false

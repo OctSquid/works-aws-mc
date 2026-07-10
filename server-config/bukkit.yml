@@ -1,0 +1,8 @@
+settings:
+  allow-end: true
+  shutdown-message: サーバーが停止しました。Discord の /start で再開できます。
+spawn-limits:
+  monsters: 70
+  animals: 10
+  water-animals: 5
+  ambient: 15

@@ -1,0 +1,7 @@
+{
+  "minecraft_version": "26.1",
+  "paper_build": "latest",
+  "jvm": {
+    "heap_mb": 6656
+  }
+}
