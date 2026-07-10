@@ -61,7 +61,7 @@ jobs:
         run: |
           AMI_ID=$(jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d: -f2)
           echo "New AMI: $AMI_ID"
-          aws ssm put-parameter --name /mc/ami-id --type String --overwrite --value "$AMI_ID"
+          aws ssm put-parameter --name /mc/ami-id --type String --data-type aws:ec2:image --overwrite --value "$AMI_ID"
 
       - name: Deregister old AMIs (keep newest ${{ env.AMI_KEEP_GENERATIONS }})
         run: |

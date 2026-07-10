@@ -217,12 +217,26 @@ resource "aws_lambda_permission" "snapshot_completed" {
 #     --type SecureString --value '<token>' --overwrite
 # ----------------------------------------------------------------------------
 
+# Launch Template の "resolve:ssm:" は data_type = aws:ec2:image の
+# パラメータしか参照できず、このタイプは実在する AMI ID しか書き込めない。
+# 初期値には最新の AL2023 AMI を使う（Packer CI が実 AMI で上書きする）。
+data "aws_ami" "al2023" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-2023.*-x86_64"]
+  }
+}
+
 locals {
   ssm_parameters = {
     "ami-id" = {
       name        = "/mc/ami-id"
       type        = "String"
-      value       = "ami-placeholder"
+      data_type   = "aws:ec2:image"
+      value       = data.aws_ami.al2023.id
       description = "Current Minecraft server AMI ID (updated by Packer CI)"
     }
     "discord-public-key" = {
@@ -257,6 +271,7 @@ resource "aws_ssm_parameter" "this" {
 
   name        = each.value.name
   type        = each.value.type
+  data_type   = lookup(each.value, "data_type", null)
   value       = each.value.value
   description = each.value.description
 
