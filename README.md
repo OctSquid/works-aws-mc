@@ -111,6 +111,49 @@ aws ssm put-parameter --overwrite --name /mc/rcon-password --type SecureString -
 | サーバー設定変更     | `server-config/` を編集（同上）                                                                      |
 | 管理コマンド実行     | SSM Session Manager で接続し `sudo /opt/minecraft/bin/rcon.sh <command>`（SSH ポートは開いていない） |
 
+### サーバーコンソールへのアクセス
+
+SSH ポートは開けていないため、接続はすべて **SSM Session Manager** 経由で行う（IAM 権限があれば追加設定不要）。
+
+```sh
+# 稼働中インスタンスの ID を取得
+INSTANCE_ID=$(aws ec2 describe-instances \
+  --filters 'Name=tag:mc:role,Values=server' 'Name=instance-state-name,Values=running' \
+  --query 'Reservations[0].Instances[0].InstanceId' --output text)
+
+# シェルに入る（要: AWS CLI + Session Manager プラグイン https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html ）
+aws ssm start-session --target "$INSTANCE_ID"
+```
+
+セッション内でよく使う操作:
+
+```sh
+# Minecraft コンソール（RCON）— 引数なしで対話モード、引数ありで1コマンド実行
+sudo /opt/minecraft/bin/rcon.sh              # 対話コンソール（exit で抜ける）
+sudo /opt/minecraft/bin/rcon.sh list         # 例: プレイヤー一覧
+sudo /opt/minecraft/bin/rcon.sh "op Yoppy431" # 例: OP 付与
+
+# サーバーログの追尾
+sudo journalctl -fu minecraft                # systemd 経由（起動失敗の調査はこちら）
+sudo tail -f /srv/minecraft/logs/latest.log  # Minecraft 本体のログ
+
+# サービスの状態確認・再起動
+systemctl status minecraft mc-bootstrap mc-up-notify
+sudo systemctl restart minecraft
+```
+
+セッションに入らず 1 コマンドだけ実行する場合は SSM RunCommand でも可:
+
+```sh
+aws ssm send-command --instance-ids "$INSTANCE_ID" \
+  --document-name AWS-RunShellScript \
+  --parameters 'commands=["/opt/minecraft/bin/rcon.sh list"]'
+```
+
+> 注意: `stop` を RCON から直接打つとサーバープロセスは止まるが、terminate・スナップショットの
+> ライフサイクルは Discord の `/stop`（または自動停止）経由でないと走らない。
+> 通常の停止は必ず `/stop` を使うこと。
+
 ### プラグインの追加方法
 
 `plugins.json` の `plugins` 配列に 1 エントリ追加する。対応ソース: `hangar`（PaperMC 公式・推奨）/ `modrinth` / `github` / `geysermc` / `curseforge`（要 API キー）/ `url` / `local`（手動入手 jar を `server-config/plugins-local/` に置く）。
