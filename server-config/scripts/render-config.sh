@@ -26,5 +26,13 @@ RCON_PASSWORD=${RCON_PASSWORD}
 DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
 EOF
 
+# server.properties は RCON パスワードを含むので 600 にするが、
+# root ではなく minecraft ユーザーの所有にする（Paper は minecraft ユーザーで
+# 動くため、root:600 のままだと読めずデフォルト設定 = RCON 無効で起動してしまう）
+MC_USER="${MC_USER:-minecraft}"
 sed "s|@RCON_PASSWORD@|${RCON_PASSWORD}|" "$DATA/server.properties.tmpl" > "$DATA/server.properties"
+chmod 600 "$DATA/server.properties"
+if id "$MC_USER" >/dev/null 2>&1; then
+  chown "$MC_USER:$MC_USER" "$DATA/server.properties"
+fi
 echo "config rendered"

@@ -14,7 +14,8 @@
 # ============================================================================
 
 locals {
-  server_fqdn = "${var.subdomain}.${var.domain_name}"
+  # subdomain が空文字ならドメイン apex をそのままサーバー名にする
+  server_fqdn = var.subdomain == "" ? var.domain_name : "${var.subdomain}.${var.domain_name}"
 
   # Lambda のビルド成果物ディレクトリ（リポジトリルートの lambda/dist/）。
   # path.root = terraform/envs/prod なので 3 階層上がリポジトリルート。

@@ -23,7 +23,18 @@ LIST_OUT="$(/opt/minecraft/bin/rcon.sh list 2>/dev/null || echo "")"
 PLAYERS="$(echo "$LIST_OUT" | grep -oE 'There are [0-9]+' | grep -oE '[0-9]+' || echo "")"
 
 if [ -z "$PLAYERS" ]; then
-  # RCON 不通（起動中など）はカウントしない
+  # グレース期間後も RCON が不通なのはサーバー異常。放置すると自動停止が
+  # 効かずコストが垂れ流しになるため、不通も idle と同様にカウントして
+  # IDLE_LIMIT 回連続で停止する
+  COUNT="$(cat "$COUNT_FILE" 2>/dev/null || echo 0)"
+  COUNT=$((COUNT + 1))
+  echo "$COUNT" > "$COUNT_FILE"
+  echo "idle check: rcon unreachable count=$COUNT/$IDLE_LIMIT"
+  if [ "$COUNT" -ge "$IDLE_LIMIT" ]; then
+    echo "rcon unreachable limit reached; shutting down"
+    /opt/minecraft/bin/notify-discord.sh "⚠️ RCON に${IDLE_LIMIT}分間応答がないため、サーバーを自動停止します。" || true
+    /opt/minecraft/bin/mc-shutdown.sh auto-idle --fast
+  fi
   exit 0
 fi
 
