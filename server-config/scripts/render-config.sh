@@ -6,9 +6,9 @@
 set -euo pipefail
 
 DATA="${DATA:-/srv/minecraft}"
-ENV_FILE="/etc/minecraft/env"
+ENV_FILE="${ENV_FILE:-/etc/minecraft/env}"
 
-mkdir -p /etc/minecraft
+mkdir -p "$(dirname "$ENV_FILE")"
 
 if [ "${LOCAL:-0}" != "1" ]; then
   TOKEN="$(curl -sf -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 300')"
