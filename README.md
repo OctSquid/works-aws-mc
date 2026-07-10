@@ -8,7 +8,7 @@ Discord の Slash Command で必要な時だけスポットインスタンスを
 
 ## アーキテクチャ
 
-```
+```bash
 [Discord] ─/start /stop /status─▶ [Lambda: interactions] (Function URL, 署名検証, deferred応答)
                                       │ async invoke
                                       ▼
@@ -26,18 +26,18 @@ Discord の Slash Command で必要な時だけスポットインスタンスを
 
 ## リポジトリ構成
 
-| パス | 内容 |
-|---|---|
-| `server.json` | Minecraft/Paper バージョンと JVM ヒープサイズ |
-| `plugins.json` | プラグイン定義（追加はここに 1 エントリ書くだけ） |
-| `server-config/` | サーバー・プラグイン設定、インスタンス上のスクリプト、systemd ユニット |
-| `tools/download-artifacts/` | server.json/plugins.json を解釈して Paper + プラグインを DL |
-| `tools/register-commands/` | Discord Slash Commands 登録 |
-| `packer/` | AMI ビルド定義 |
-| `lambda/` | interactions / command-worker / lifecycle / spot-interruption |
-| `terraform/bootstrap/` | 初回手動 apply（state バケット, GitHub OIDC, CI ロール） |
-| `terraform/envs/prod/` | 本番環境一式 |
-| `docker/` | ローカルテスト環境（本番と同じプロビジョニングスクリプトを使用） |
+| パス                        | 内容                                                                   |
+| --------------------------- | ---------------------------------------------------------------------- |
+| `server.json`               | Minecraft/Paper バージョンと JVM ヒープサイズ                          |
+| `plugins.json`              | プラグイン定義（追加はここに 1 エントリ書くだけ）                      |
+| `server-config/`            | サーバー・プラグイン設定、インスタンス上のスクリプト、systemd ユニット |
+| `tools/download-artifacts/` | server.json/plugins.json を解釈して Paper + プラグインを DL            |
+| `tools/register-commands/`  | Discord Slash Commands 登録                                            |
+| `packer/`                   | AMI ビルド定義                                                         |
+| `lambda/`                   | interactions / command-worker / lifecycle / spot-interruption          |
+| `terraform/bootstrap/`      | 初回手動 apply（state バケット, GitHub OIDC, CI ロール）               |
+| `terraform/envs/prod/`      | 本番環境一式                                                           |
+| `docker/`                   | ローカルテスト環境（本番と同じプロビジョニングスクリプトを使用）       |
 
 ## 初回セットアップ
 
@@ -100,16 +100,16 @@ aws ssm put-parameter --overwrite --name /mc/rcon-password --type SecureString -
 
 ## 日常運用
 
-| 操作 | 方法 |
-|---|---|
-| サーバー起動 | Discord で `/start`（最も安い AZ×インスタンスタイプのスポットを自動選択） |
-| スポット枯渇時 | `/start ondemand:True` でオンデマンド起動（割高。明示指定のみ） |
-| サーバー停止 | `/stop`（自動でスナップショットバックアップ）。放置でも 15 分無人で自動停止 |
-| 状態確認 | `/status` |
-| プラグイン追加・更新 | `plugins.json` を編集して PR → main マージで AMI 自動再ビルド → 次回 `/start` から反映 |
-| MC バージョンアップ | `server.json` の `minecraft_version` を更新（同上） |
-| サーバー設定変更 | `server-config/` を編集（同上） |
-| 管理コマンド実行 | SSM Session Manager で接続し `sudo /opt/minecraft/bin/rcon.sh <command>`（SSH ポートは開いていない） |
+| 操作                 | 方法                                                                                                 |
+| -------------------- | ---------------------------------------------------------------------------------------------------- |
+| サーバー起動         | Discord で `/start`（最も安い AZ×インスタンスタイプのスポットを自動選択）                            |
+| スポット枯渇時       | `/start ondemand:True` でオンデマンド起動（割高。明示指定のみ）                                      |
+| サーバー停止         | `/stop`（自動でスナップショットバックアップ）。放置でも 15 分無人で自動停止                          |
+| 状態確認             | `/status`                                                                                            |
+| プラグイン追加・更新 | `plugins.json` を編集して PR → main マージで AMI 自動再ビルド → 次回 `/start` から反映               |
+| MC バージョンアップ  | `server.json` の `minecraft_version` を更新（同上）                                                  |
+| サーバー設定変更     | `server-config/` を編集（同上）                                                                      |
+| 管理コマンド実行     | SSM Session Manager で接続し `sudo /opt/minecraft/bin/rcon.sh <command>`（SSH ポートは開いていない） |
 
 ### プラグインの追加方法
 
@@ -149,13 +149,13 @@ cd ../../docker && docker compose up --build
 
 ## 障害時リカバリ
 
-| 症状 | 対応 |
-|---|---|
-| `/start` が「既に操作が進行中」のまま | 15 分待つと状態ロックは奪取可能になる。急ぐ場合は DynamoDB `mc-server-state` の `state` を `STOPPED` に手動更新 |
-| スナップショット作成に失敗した | データはボリュームに残っている（DeleteOnTermination=false）。`mc:data=true` タグの available ボリュームを確認し、次回 `/start` はそのボリュームを再利用する |
-| ワールドを過去時点に戻したい | DynamoDB を STOPPED にした上で、戻したい世代より新しいスナップショット（`mc:data=true`）を削除 → `/start`（最新スナップショットから復元される） |
-| Bedrock 版で入れない | Floodgate の `key.pem` が失われた可能性。スナップショットから復元するか、全 Bedrock プレイヤーの再リンクが必要 |
-| インスタンスに入りたい | `aws ssm start-session --target <instance-id>` |
+| 症状                                  | 対応                                                                                                                                                        |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/start` が「既に操作が進行中」のまま | 15 分待つと状態ロックは奪取可能になる。急ぐ場合は DynamoDB `mc-server-state` の `state` を `STOPPED` に手動更新                                             |
+| スナップショット作成に失敗した        | データはボリュームに残っている（DeleteOnTermination=false）。`mc:data=true` タグの available ボリュームを確認し、次回 `/start` はそのボリュームを再利用する |
+| ワールドを過去時点に戻したい          | DynamoDB を STOPPED にした上で、戻したい世代より新しいスナップショット（`mc:data=true`）を削除 → `/start`（最新スナップショットから復元される）             |
+| Bedrock 版で入れない                  | Floodgate の `key.pem` が失われた可能性。スナップショットから復元するか、全 Bedrock プレイヤーの再リンクが必要                                              |
+| インスタンスに入りたい                | `aws ssm start-session --target <instance-id>`                                                                                                              |
 
 ## コスト管理
 
