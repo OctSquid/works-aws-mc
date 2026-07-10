@@ -248,6 +248,35 @@ data "aws_iam_policy_document" "gha_packer" {
     resources = ["*"]
   }
 
+  # スポットインスタンスでビルドする場合に追加で必要な権限
+  # (packer/minecraft.pkr.hcl の spot_price / spot_instance_types)
+  statement {
+    sid = "PackerSpotBuild"
+    actions = [
+      "ec2:CreateLaunchTemplate",
+      "ec2:DeleteLaunchTemplate",
+      "ec2:DescribeLaunchTemplates",
+      "ec2:CreateFleet",
+      "ec2:DescribeSpotPriceHistory",
+      "ec2:DescribeInstanceTypeOfferings",
+    ]
+    resources = ["*"]
+  }
+
+  # スポット利用時に AWS が自動作成するサービスリンクロール
+  # （アカウントに既に存在すれば実際には呼ばれない）
+  statement {
+    sid       = "SpotServiceLinkedRole"
+    actions   = ["iam:CreateServiceLinkedRole"]
+    resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/spot.amazonaws.com/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "iam:AWSServiceName"
+      values   = ["spot.amazonaws.com"]
+    }
+  }
+
   # ビルド完了後に /mc/ami-id を新 AMI ID へ更新する
   statement {
     sid = "PublishAmiId"
