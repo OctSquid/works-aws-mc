@@ -25,7 +25,7 @@ function intEnv(name: string, defaultValue: number): number {
   return Number.isFinite(n) ? n : defaultValue;
 }
 
-export const DEFAULT_INSTANCE_TYPES = "m7a.large,m7i.large,m6a.large";
+export const DEFAULT_INSTANCE_TYPES = "m6g.large,m7g.large";
 
 export const config = {
   get tableName(): string {

@@ -15,17 +15,6 @@ variable "subdomain" {
   default     = "mc"
 }
 
-variable "instance_types" {
-  description = "スポット起動候補のインスタンスタイプ（優先順。command-worker がスポット価格の安い順に試行する）"
-  type        = list(string)
-  default     = ["m7a.large", "m7i.large", "m6a.large"]
-
-  validation {
-    condition     = length(var.instance_types) > 0
-    error_message = "instance_types は 1 つ以上指定してください。"
-  }
-}
-
 variable "data_volume_size_gb" {
   description = "データ用 EBS ボリューム（/srv/minecraft）のサイズ (GiB)"
   type        = number

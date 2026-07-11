@@ -9,7 +9,7 @@
 - GitHub Actionsを使用して，AMIのビルドとIaCのコードを自動デプロイする．
 - AMIを使用して，Minecraftサーバーの構築・起動・停止を自動化する．
 - Discord Botを使用して，必要な時のみサーバーを構成・起動する．
-- スポットインスタンスを使用して，コストを削減する．(m7a.largeを使用する)
+- スポットインスタンスを使用して，コストを削減する．(m6g.large = Graviton/arm64 を使用する．server.json の ec2 で変更可能)
 - AWS Lambdaを使用して，DiscordのSlash Commandsからのリクエストに応じてサーバーを構成・起動する．
 - サーバーが停止されたとき，インスタンスを削除する．
 - Cron + EventBridge + Rcon を使用して，15分間プレイヤーがいない場合にサーバーを自動停止する．

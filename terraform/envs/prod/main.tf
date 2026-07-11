@@ -21,6 +21,12 @@ locals {
   # path.root = terraform/envs/prod なので 3 階層上がリポジトリルート。
   # dist が未ビルドでも validate は通る（plan/apply には事前ビルドが必要）。
   lambda_dist_dir = "${path.root}/../../../lambda/dist"
+
+  # インスタンスタイプとアーキテクチャは server.json が単一の真実の源
+  # （Packer も同じファイルを読んで同一 arch の AMI をビルドする）
+  server_spec    = jsondecode(file("${path.root}/../../../server.json"))
+  architecture   = local.server_spec.ec2.architecture
+  instance_types = local.server_spec.ec2.instance_types
 }
 
 module "network" {
@@ -38,7 +44,7 @@ module "server" {
 
   region                = var.region
   security_group_id     = module.network.security_group_id
-  default_instance_type = var.instance_types[0]
+  default_instance_type = local.instance_types[0]
 }
 
 module "control_plane" {
@@ -49,7 +55,8 @@ module "control_plane" {
   subnet_ids            = module.network.subnet_ids
   hosted_zone_id        = module.dns.zone_id
   server_fqdn           = local.server_fqdn
-  instance_types        = var.instance_types
+  instance_types        = local.instance_types
+  architecture          = local.architecture
   data_volume_size_gb   = var.data_volume_size_gb
   snapshot_retention    = var.snapshot_retention
   ec2_instance_role_arn = module.server.instance_role_arn

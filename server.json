@@ -3,5 +3,9 @@
   "paper_build": "latest",
   "jvm": {
     "heap_mb": 6656
+  },
+  "ec2": {
+    "architecture": "arm64",
+    "instance_types": ["m6g.large", "m7g.large"]
   }
 }

@@ -48,7 +48,7 @@ describe("/start の候補フォールバック", () => {
     vi.stubEnv("SUBNET_IDS", "subnet-a,subnet-c,subnet-d");
     vi.stubEnv("HOSTED_ZONE_ID", "Z123");
     vi.stubEnv("SERVER_FQDN", "mc.example.com");
-    vi.stubEnv("INSTANCE_TYPES", "m7a.large,m7i.large,m6a.large");
+    vi.stubEnv("INSTANCE_TYPES", "m6g.large,m7g.large");
     vi.stubGlobal("fetch", fetchMock);
     fetchMock.mockClear();
 
@@ -80,24 +80,24 @@ describe("/start の候補フォールバック", () => {
         { SubnetId: "subnet-d", AvailabilityZone: "ap-northeast-1d" },
       ],
     });
-    // 価格: 1a/m7a が最安、次点 1c/m7i
+    // 価格: 1a/m6g が最安、次点 1c/m7g
     ec2Mock.on(DescribeSpotPriceHistoryCommand).resolves({
       SpotPriceHistory: [
         {
           AvailabilityZone: "ap-northeast-1a",
-          InstanceType: "m7a.large",
+          InstanceType: "m6g.large",
           SpotPrice: "0.0400",
           Timestamp: new Date(),
         },
         {
           AvailabilityZone: "ap-northeast-1c",
-          InstanceType: "m7i.large",
+          InstanceType: "m7g.large",
           SpotPrice: "0.0500",
           Timestamp: new Date(),
         },
         {
           AvailabilityZone: "ap-northeast-1d",
-          InstanceType: "m6a.large",
+          InstanceType: "m6g.large",
           SpotPrice: "0.0600",
           Timestamp: new Date(),
         },
@@ -137,15 +137,15 @@ describe("/start の候補フォールバック", () => {
 
     const runCalls = ec2Mock.commandCalls(RunInstancesCommand);
     expect(runCalls).toHaveLength(2);
-    // 1回目: 最安の 1a/m7a.large
+    // 1回目: 最安の 1a/m6g.large
     expect(runCalls[0]!.args[0].input).toMatchObject({
       SubnetId: "subnet-a",
-      InstanceType: "m7a.large",
+      InstanceType: "m6g.large",
     });
-    // 2回目: 次点の 1c/m7i.large
+    // 2回目: 次点の 1c/m7g.large
     expect(runCalls[1]!.args[0].input).toMatchObject({
       SubnetId: "subnet-c",
-      InstanceType: "m7i.large",
+      InstanceType: "m7g.large",
     });
     // スポット指定は worker が毎回付与する（LT は market options を持たない前提）
     expect(runCalls[1]!.args[0].input.InstanceMarketOptions).toMatchObject({ MarketType: "spot" });
@@ -174,7 +174,7 @@ describe("/start の候補フォールバック", () => {
     expect(toRunning?.ExpressionAttributeValues).toMatchObject({
       ":set_instance_id": "i-ok",
       ":set_az": "ap-northeast-1c",
-      ":set_instance_type": "m7i.large",
+      ":set_instance_type": "m7g.large",
       ":set_spot_price": 0.05,
       ":set_volume_id": "vol-new",
     });
@@ -199,7 +199,7 @@ describe("/start の候補フォールバック", () => {
     expect(runCalls).toHaveLength(3);
     expect(runCalls[2]!.args[0].input).toMatchObject({
       SubnetId: "subnet-d",
-      InstanceType: "m6a.large",
+      InstanceType: "m6g.large",
     });
   });
 

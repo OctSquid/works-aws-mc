@@ -2,6 +2,12 @@ export interface ServerSpec {
   minecraft_version: string;
   paper_build: "latest" | number;
   jvm: { heap_mb: number };
+  /** EC2 の起動設定。Terraform / Packer も server.json を直接読むため単一の真実の源になる */
+  ec2: {
+    architecture: "arm64" | "x86_64";
+    /** スポット起動候補（優先順）。architecture と整合していること */
+    instance_types: string[];
+  };
 }
 
 export type PluginSpec =

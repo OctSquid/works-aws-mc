@@ -26,6 +26,21 @@ variable "server_fqdn" {
 variable "instance_types" {
   description = "スポット起動候補のインスタンスタイプ（優先順）"
   type        = list(string)
+
+  validation {
+    condition     = length(var.instance_types) > 0
+    error_message = "instance_types は 1 つ以上指定してください。"
+  }
+}
+
+variable "architecture" {
+  description = "サーバーの CPU アーキテクチャ（シード AMI の選択に使用。instance_types と整合していること）"
+  type        = string
+
+  validation {
+    condition     = contains(["arm64", "x86_64"], var.architecture)
+    error_message = "architecture は arm64 か x86_64 を指定してください。"
+  }
 }
 
 variable "data_volume_size_gb" {

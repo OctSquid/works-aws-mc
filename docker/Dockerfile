@@ -3,6 +3,8 @@
 # ビルド前に `npm run download` (tools/download-artifacts) で artifacts/ を生成しておくこと。
 FROM amazonlinux:2023
 
+# buildkit がホストの arch を自動設定する（server.json の本番 arch には従わない —
+# エミュレーションだと JVM の JIT が不安定なため、ローカルは常にネイティブでテストする）
 ARG TARGETARCH=amd64
 ARG RCON_CLI_VERSION=1.6.11
 

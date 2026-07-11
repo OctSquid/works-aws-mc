@@ -15,8 +15,16 @@ mkdir -p /opt/minecraft/bin
 cp /tmp/server-config/scripts/*.sh /opt/minecraft/bin/
 chmod +x /opt/minecraft/bin/*.sh
 
-# rcon-cli (itzg)
-curl -sfL "https://github.com/itzg/rcon-cli/releases/download/${RCON_CLI_VERSION}/rcon-cli_${RCON_CLI_VERSION}_linux_amd64.tar.gz" \
+# rcon-cli (itzg) — arch はビルドインスタンス自身から導出（AMI と常に一致する）
+case "$(uname -m)" in
+  aarch64) RCON_ARCH=arm64 ;;
+  x86_64) RCON_ARCH=amd64 ;;
+  *)
+    echo "unsupported architecture: $(uname -m)" >&2
+    exit 1
+    ;;
+esac
+curl -sfL "https://github.com/itzg/rcon-cli/releases/download/${RCON_CLI_VERSION}/rcon-cli_${RCON_CLI_VERSION}_linux_${RCON_ARCH}.tar.gz" \
   | tar -xz -C /tmp
 install -m 755 /tmp/rcon-cli /opt/minecraft/bin/rcon-cli
 

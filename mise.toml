@@ -1,3 +1,6 @@
+[env]
+AWS_PROFILE = "mc"
+
 [tools]
 aws-cli = { version = "latest", symlink_bins = "true" }
 terraform = "1.12"

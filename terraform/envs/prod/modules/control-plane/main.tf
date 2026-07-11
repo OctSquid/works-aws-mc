@@ -226,7 +226,18 @@ data "aws_ami" "al2023" {
 
   filter {
     name   = "name"
-    values = ["al2023-ami-2023.*-x86_64"]
+    values = ["al2023-ami-2023.*-${var.architecture}"]
+  }
+
+  lifecycle {
+    # instance_types と AMI arch の不整合は /start 時まで発覚しないため plan で落とす
+    precondition {
+      condition = alltrue([
+        for type in var.instance_types :
+        can(regex("^[a-z]+\\d+g", type)) == (var.architecture == "arm64")
+      ])
+      error_message = "instance_types (${join(", ", var.instance_types)}) が architecture=${var.architecture} と整合しません。"
+    }
   }
 }
 

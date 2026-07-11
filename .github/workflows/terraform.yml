@@ -2,10 +2,11 @@ name: terraform
 
 on:
   pull_request:
-    paths: ["terraform/**", "lambda/**", ".github/workflows/terraform.yml"]
+    # server.json: Terraform が ec2.instance_types / ec2.architecture を直接読むため
+    paths: ["terraform/**", "lambda/**", "server.json", ".github/workflows/terraform.yml"]
   push:
     branches: [main]
-    paths: ["terraform/**", "lambda/**", ".github/workflows/terraform.yml"]
+    paths: ["terraform/**", "lambda/**", "server.json", ".github/workflows/terraform.yml"]
 
 permissions:
   id-token: write # OIDC

@@ -15,7 +15,7 @@ Discord の Slash Command で必要な時だけスポットインスタンスを
                                  [Lambda: command-worker] (DynamoDB で排他・状態機械)
                                       │ 最安AZのスポットを自動選択して起動 / SSM経由で graceful stop
                                       ▼
-[EC2 スポット m7a.large] ← Packer製AMI (Paper + Geyser + Floodgate + 設定焼き込み)
+[EC2 スポット m6g.large (Graviton/arm64)] ← Packer製AMI (Paper + Geyser + Floodgate + 設定焼き込み)
    ├ /srv/minecraft = データ用EBS (停止時スナップショット化 → 起動時復元)
    └ systemd timer: 15分無人で自動停止
 [EventBridge] ─ スポット中断警告 / terminate / snapshot完了 ─▶ [Lambda: lifecycle 等]
@@ -26,18 +26,18 @@ Discord の Slash Command で必要な時だけスポットインスタンスを
 
 ## リポジトリ構成
 
-| パス                        | 内容                                                                   |
-| --------------------------- | ---------------------------------------------------------------------- |
-| `server.json`               | Minecraft/Paper バージョンと JVM ヒープサイズ                          |
-| `plugins.json`              | プラグイン定義（追加はここに 1 エントリ書くだけ）                      |
-| `server-config/`            | サーバー・プラグイン設定、インスタンス上のスクリプト、systemd ユニット |
-| `tools/download-artifacts/` | server.json/plugins.json を解釈して Paper + プラグインを DL            |
-| `tools/register-commands/`  | Discord Slash Commands 登録                                            |
-| `packer/`                   | AMI ビルド定義                                                         |
-| `lambda/`                   | interactions / command-worker / lifecycle / spot-interruption          |
-| `terraform/bootstrap/`      | 初回手動 apply（state バケット, GitHub OIDC, CI ロール）               |
-| `terraform/envs/prod/`      | 本番環境一式                                                           |
-| `docker/`                   | ローカルテスト環境（本番と同じプロビジョニングスクリプトを使用）       |
+| パス                        | 内容                                                                    |
+| --------------------------- | ----------------------------------------------------------------------- |
+| `server.json`               | Minecraft/Paper バージョン、JVM ヒープ、EC2 の arch・インスタンスタイプ |
+| `plugins.json`              | プラグイン定義（追加はここに 1 エントリ書くだけ）                       |
+| `server-config/`            | サーバー・プラグイン設定、インスタンス上のスクリプト、systemd ユニット  |
+| `tools/download-artifacts/` | server.json/plugins.json を解釈して Paper + プラグインを DL             |
+| `tools/register-commands/`  | Discord Slash Commands 登録                                             |
+| `packer/`                   | AMI ビルド定義                                                          |
+| `lambda/`                   | interactions / command-worker / lifecycle / spot-interruption           |
+| `terraform/bootstrap/`      | 初回手動 apply（state バケット, GitHub OIDC, CI ロール）                |
+| `terraform/envs/prod/`      | 本番環境一式                                                            |
+| `docker/`                   | ローカルテスト環境（本番と同じプロビジョニングスクリプトを使用）        |
 
 ## 初回セットアップ
 
@@ -100,16 +100,17 @@ aws ssm put-parameter --overwrite --name /mc/rcon-password --type SecureString -
 
 ## 日常運用
 
-| 操作                 | 方法                                                                                                 |
-| -------------------- | ---------------------------------------------------------------------------------------------------- |
-| サーバー起動         | Discord で `/start`（最も安い AZ×インスタンスタイプのスポットを自動選択）                            |
-| スポット枯渇時       | `/start ondemand:True` でオンデマンド起動（割高。明示指定のみ）                                      |
-| サーバー停止         | `/stop`（自動でスナップショットバックアップ）。放置でも 15 分無人で自動停止                          |
-| 状態確認             | `/status`                                                                                            |
-| プラグイン追加・更新 | `plugins.json` を編集して PR → main マージで AMI 自動再ビルド → 次回 `/start` から反映               |
-| MC バージョンアップ  | `server.json` の `minecraft_version` を更新（同上）                                                  |
-| サーバー設定変更     | `server-config/` を編集（同上）                                                                      |
-| 管理コマンド実行     | SSM Session Manager で接続し `sudo /opt/minecraft/bin/rcon.sh <command>`（SSH ポートは開いていない） |
+| 操作                   | 方法                                                                                                 |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- |
+| サーバー起動           | Discord で `/start`（最も安い AZ×インスタンスタイプのスポットを自動選択）                            |
+| スポット枯渇時         | `/start ondemand:True` でオンデマンド起動（割高。明示指定のみ）                                      |
+| サーバー停止           | `/stop`（自動でスナップショットバックアップ）。放置でも 15 分無人で自動停止                          |
+| 状態確認               | `/status`                                                                                            |
+| プラグイン追加・更新   | `plugins.json` を編集して PR → main マージで AMI 自動再ビルド → 次回 `/start` から反映               |
+| MC バージョンアップ    | `server.json` の `minecraft_version` を更新（同上）                                                  |
+| インスタンスタイプ変更 | `server.json` の `ec2` を編集（arch 変更時は AMI 再ビルド + terraform apply の両方が自動で走る）     |
+| サーバー設定変更       | `server-config/` を編集（同上）                                                                      |
+| 管理コマンド実行       | SSM Session Manager で接続し `sudo /opt/minecraft/bin/rcon.sh <command>`（SSH ポートは開いていない） |
 
 ### サーバーコンソールへのアクセス
 
@@ -194,6 +195,9 @@ cd ../../docker && docker compose up --build
 > **注意（Apple Silicon）**: Docker デーモンが x86_64 エミュレーション（colima の x86_64 VM 等）の場合、
 > JVM の JIT が SIGSEGV でクラッシュすることがある。ネイティブ arch の VM（`colima start --arch aarch64 --vm-type vz`
 > や Docker Desktop）を使うこと。応急処置は `JAVA_TOOL_OPTIONS=-Xint`（非常に遅い）。
+>
+> ローカルビルドは常に**ホストのネイティブ arch** に従う（server.json の `ec2.architecture` は
+> 本番 AMI / EC2 専用で、Docker ビルドには影響しない）。
 
 ### Lint / Format
 
@@ -218,14 +222,14 @@ npm run fmt:check # 整形差分の検査のみ（CI と同じ）
 
 ## リソースのライフサイクル（何が残り、何が自動で消えるか）
 
-| リソース                                | 挙動                                                                                                                                                          | 課金                              |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| ゲーム用インスタンス                    | `/stop`・自動停止・スポット中断で **terminate**。コンソールには約1時間 `terminated` 表示で残るが、これは AWS の表示仕様で**実体はなく課金もない**             | 稼働中のみ                        |
-| Packer ビルド用インスタンス (t3.medium) | ビルド完了時に Packer が terminate（上と同様にしばらく表示は残る）                                                                                            | ビルド中のみ（スポット・数分）    |
-| データ用 EBS ボリューム                 | terminate 後に lifecycle Lambda がスナップショット化 → **削除**。残るのは異常時のみ（データ保全のため意図的に残す）                                           | 稼働中のみ                        |
-| ワールドスナップショット (20GB)         | 停止のたびに1つ作成、**直近 `snapshot_retention` 世代（現在3）を残して自動削除**。毎回別ボリューム由来のため増分にならず、実使用量×世代数で課金される点に注意 | ~$0.05/GB・月 × 実使用量 × 世代数 |
-| AMI                                     | ビルドのたびに作成、**最新2世代を残して自動 deregister**（付随する 8GB スナップショットも削除）                                                               | 実使用 ~3GB × 2世代 ≈ $0.3/月     |
-| Route53 A レコード                      | terminate 時に lifecycle Lambda が削除                                                                                                                        | zone 代のみ                       |
+| リソース                                 | 挙動                                                                                                                                                          | 課金                              |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| ゲーム用インスタンス                     | `/stop`・自動停止・スポット中断で **terminate**。コンソールには約1時間 `terminated` 表示で残るが、これは AWS の表示仕様で**実体はなく課金もない**             | 稼働中のみ                        |
+| Packer ビルド用インスタンス (t4g.medium) | ビルド完了時に Packer が terminate（上と同様にしばらく表示は残る）                                                                                            | ビルド中のみ（スポット・数分）    |
+| データ用 EBS ボリューム                  | terminate 後に lifecycle Lambda がスナップショット化 → **削除**。残るのは異常時のみ（データ保全のため意図的に残す）                                           | 稼働中のみ                        |
+| ワールドスナップショット (20GB)          | 停止のたびに1つ作成、**直近 `snapshot_retention` 世代（現在3）を残して自動削除**。毎回別ボリューム由来のため増分にならず、実使用量×世代数で課金される点に注意 | ~$0.05/GB・月 × 実使用量 × 世代数 |
+| AMI                                      | ビルドのたびに作成、**最新2世代を残して自動 deregister**（付随する 8GB スナップショットも削除）                                                               | 実使用 ~3GB × 2世代 ≈ $0.3/月     |
+| Route53 A レコード                       | terminate 時に lifecycle Lambda が削除                                                                                                                        | zone 代のみ                       |
 
 つまり**停止中に残るのは「スナップショット類 + Route53 zone」だけ**（合計 $1〜2/月 程度）。
 コンソールで「インスタンスが溜まっている」ように見えたら、まず State 列が `terminated` かを確認すること。

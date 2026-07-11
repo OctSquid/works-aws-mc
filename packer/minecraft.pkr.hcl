@@ -12,12 +12,6 @@ variable "region" {
   default = "ap-northeast-1"
 }
 
-# m7a (x86_64) 向け AMI のため、ビルドも安価な x86_64 インスタンスで行う
-variable "build_instance_type" {
-  type    = string
-  default = "t3a.medium"
-}
-
 variable "rcon_cli_version" {
   type    = string
   default = "1.6.11"
@@ -25,6 +19,16 @@ variable "rcon_cli_version" {
 
 locals {
   timestamp = regex_replace(timestamp(), "[- TZ:]", "")
+
+  # server.json が AMI アーキテクチャの単一の真実の源（Terraform 側も同じファイルを読む）
+  server_spec  = jsondecode(file("${path.root}/../server.json"))
+  architecture = local.server_spec.ec2.architecture
+
+  # ビルドは本番と同一 arch の安価なスポットインスタンスで行う
+  build_instance_types = {
+    arm64  = ["t4g.medium", "m6g.medium"]
+    x86_64 = ["t3a.medium", "t3.medium"]
+  }
 }
 
 source "amazon-ebs" "minecraft" {
@@ -34,7 +38,7 @@ source "amazon-ebs" "minecraft" {
 
   source_ami_filter {
     filters = {
-      name                = "al2023-ami-2023.*-x86_64"
+      name                = "al2023-ami-2023.*-${local.architecture}"
       root-device-type    = "ebs"
       virtualization-type = "hvm"
     }
@@ -59,7 +63,7 @@ source "amazon-ebs" "minecraft" {
 
   # ビルド用スポットで AMI ビルド費も削減
   spot_price          = "auto"
-  spot_instance_types = [var.build_instance_type, "t3.medium"]
+  spot_instance_types = local.build_instance_types[local.architecture]
   fleet_tags = {
     Project = "mc-server"
   }
