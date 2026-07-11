@@ -1,6 +1,6 @@
 import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { mockClient } from "aws-sdk-client-mock";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   STALE_TAKEOVER_MS,
   canTransition,
@@ -12,7 +12,10 @@ const ddbMock = mockClient(DynamoDBDocumentClient);
 
 const NOW = new Date("2026-07-10T12:00:00.000Z");
 
-function record(state: ServerRecord["state"], ageMs: number): Pick<ServerRecord, "state" | "updated_at"> {
+function record(
+  state: ServerRecord["state"],
+  ageMs: number,
+): Pick<ServerRecord, "state" | "updated_at"> {
   return { state, updated_at: new Date(NOW.getTime() - ageMs).toISOString() };
 }
 
@@ -66,8 +69,8 @@ describe("transitionState（DynamoDB 条件付き更新）", () => {
     });
 
     const result = await transitionState({ from: "STOPPED", to: "STARTING", now: NOW });
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.record.state).toBe("STARTING");
+    assert(result.ok, "transitionState は成功するはず");
+    expect(result.record.state).toBe("STARTING");
 
     const calls = ddbMock.commandCalls(UpdateCommand);
     expect(calls).toHaveLength(1);
@@ -111,9 +114,11 @@ describe("transitionState（DynamoDB 条件付き更新）", () => {
   });
 
   it("条件不成立なら ok:false と現在状態を返す", async () => {
-    ddbMock
-      .on(UpdateCommand)
-      .rejects(Object.assign(new Error("conditional check failed"), { name: "ConditionalCheckFailedException" }));
+    ddbMock.on(UpdateCommand).rejects(
+      Object.assign(new Error("conditional check failed"), {
+        name: "ConditionalCheckFailedException",
+      }),
+    );
     ddbMock.on(GetCommand).resolves({
       Item: { pk: "server", state: "STARTING", updated_at: NOW.toISOString() },
     });
@@ -124,6 +129,8 @@ describe("transitionState（DynamoDB 条件付き更新）", () => {
 
   it("条件エラー以外の例外はそのまま投げる", async () => {
     ddbMock.on(UpdateCommand).rejects(new Error("network down"));
-    await expect(transitionState({ from: "STOPPED", to: "STARTING" })).rejects.toThrow("network down");
+    await expect(transitionState({ from: "STOPPED", to: "STARTING" })).rejects.toThrow(
+      "network down",
+    );
   });
 });

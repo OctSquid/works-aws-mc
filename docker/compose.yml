@@ -7,14 +7,14 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     ports:
-      - "25565:25565/tcp"   # Java 版
-      - "19132:19132/udp"   # Bedrock 版 (Geyser)
+      - "25565:25565/tcp" # Java 版
+      - "19132:19132/udp" # Bedrock 版 (Geyser)
     environment:
       RCON_PASSWORD: local-dev-password
-      HEAP_MB_OVERRIDE: 2048   # ローカルは小さめのヒープで起動（本番は server.json の値）
+      HEAP_MB_OVERRIDE: 2048 # ローカルは小さめのヒープで起動（本番は server.json の値）
       # ローカルでも Discord 通知を試す場合は設定する
       # DISCORD_WEBHOOK_URL: https://discord.com/api/webhooks/...
     volumes:
-      - ./data:/srv/minecraft   # EBS データボリューム相当。消さない限りワールドが残る
+      - ./data:/srv/minecraft # EBS データボリューム相当。消さない限りワールドが残る
     stdin_open: true
     tty: true

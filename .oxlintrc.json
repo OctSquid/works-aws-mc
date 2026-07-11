@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "oxc", "unicorn", "import", "promise", "node", "vitest"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error"
+  },
+  "rules": {
+    // EC2 のポーリングや順次デプロイなど、逐次 await が意図的な箇所が多い
+    "eslint/no-await-in-loop": "off",
+    // ローカル配列の in-place sort は許容する
+    "unicorn/no-array-sort": "off"
+  },
+  "env": {
+    "node": true,
+    "es2024": true
+  },
+  "ignorePatterns": ["**/dist/**", "**/node_modules/**", "**/*.js", "**/data/**"]
+}

@@ -12,7 +12,12 @@ function normalizeFqdn(fqdn: string): string {
 }
 
 /** SERVER_FQDN の A レコードを UPSERT する（TTL 60） */
-export async function upsertARecord(hostedZoneId: string, fqdn: string, ip: string, ttl = 60): Promise<void> {
+export async function upsertARecord(
+  hostedZoneId: string,
+  fqdn: string,
+  ip: string,
+  ttl = 60,
+): Promise<void> {
   await route53.send(
     new ChangeResourceRecordSetsCommand({
       HostedZoneId: hostedZoneId,

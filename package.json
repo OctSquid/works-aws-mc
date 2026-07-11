@@ -1,0 +1,17 @@
+{
+  "name": "aws-mc-server",
+  "private": true,
+  "description": "リポジトリ共通の Lint / Format ツール (oxlint, oxfmt)",
+  "scripts": {
+    "lint": "oxlint",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.58.0",
+    "oxlint": "^1.73.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

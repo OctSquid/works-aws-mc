@@ -14,7 +14,7 @@ export async function fetchJson<T>(url: string, headers: Record<string, string> 
 export async function downloadFile(
   url: string,
   dest: string,
-  opts: { sha256?: string; headers?: Record<string, string> } = {},
+  opts: { sha256?: string | undefined; headers?: Record<string, string> | undefined } = {},
 ): Promise<void> {
   const res = await fetch(url, {
     headers: { "user-agent": USER_AGENT, ...opts.headers },

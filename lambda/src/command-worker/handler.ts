@@ -25,14 +25,14 @@ export interface WorkerPayload {
   options?: Record<string, unknown>;
   applicationId?: string;
   token?: string;
-  channelId?: string;
-  invokedBy?: string;
+  channelId?: string | undefined;
+  invokedBy?: string | undefined;
 }
 
 interface InteractionContext {
   applicationId: string;
   token: string;
-  invokedBy?: string;
+  invokedBy?: string | undefined;
 }
 
 const STATE_LABELS: Record<ServerState, string> = {
@@ -67,11 +67,19 @@ export const handler = async (event: WorkerPayload): Promise<void> => {
         await handleStatus(ctx);
         break;
       default:
-        await editOriginalResponse(applicationId, token, `❓ 不明なコマンドです: ${event.command ?? "(なし)"}`);
+        await editOriginalResponse(
+          applicationId,
+          token,
+          `❓ 不明なコマンドです: ${event.command ?? "(なし)"}`,
+        );
     }
   } catch (err) {
     log("error", "worker unhandled error", { command: event.command, error: errorMessage(err) });
-    await editOriginalResponse(applicationId, token, `❌ 処理中にエラーが発生しました: ${errorMessage(err)}`);
+    await editOriginalResponse(
+      applicationId,
+      token,
+      `❌ 処理中にエラーが発生しました: ${errorMessage(err)}`,
+    );
   }
 };
 
@@ -79,7 +87,10 @@ export const handler = async (event: WorkerPayload): Promise<void> => {
 // /start
 // ---------------------------------------------------------------------------
 
-async function handleStart(ctx: InteractionContext, options: Record<string, unknown>): Promise<void> {
+async function handleStart(
+  ctx: InteractionContext,
+  options: Record<string, unknown>,
+): Promise<void> {
   const ondemand = options["ondemand"] === true || options["ondemand"] === "true";
 
   const takeover = await transitionState({ from: "STOPPED", to: "STARTING" });
@@ -111,7 +122,9 @@ async function handleStart(ctx: InteractionContext, options: Record<string, unkn
     await editOriginalResponse(
       ctx.applicationId,
       ctx.token,
-      [`⏳ サーバーを起動しています…（${ondemand ? "オンデマンド" : "スポット"}）`, ...notes].join("\n"),
+      [`⏳ サーバーを起動しています…（${ondemand ? "オンデマンド" : "スポット"}）`, ...notes].join(
+        "\n",
+      ),
     );
 
     let candidates = await fetchSpotCandidates(config.instanceTypes, subnetsByAz);
@@ -252,7 +265,10 @@ async function handleStop(ctx: InteractionContext): Promise<void> {
     // インスタンス側スクリプト: RCON 告知 → save-all → systemctl stop → mc:stop-reason タグ → poweroff
     await runShellCommand(instanceId, ["/opt/minecraft/bin/mc-shutdown.sh manual"]);
   } catch (err) {
-    log("warn", "ssm send-command failed, terminating directly", { instanceId, error: errorMessage(err) });
+    log("warn", "ssm send-command failed, terminating directly", {
+      instanceId,
+      error: errorMessage(err),
+    });
     try {
       await tagStopReason(instanceId, "manual");
     } catch (tagErr) {
@@ -300,25 +316,36 @@ async function handleStatus(ctx: InteractionContext): Promise<void> {
   };
   const lines: string[] = [`${emoji[record.state]} 状態: ${stateLabel(record.state)}`];
 
-  if (record.instance_id && (record.state === "RUNNING" || record.state === "STARTING" || record.state === "STOPPING")) {
+  if (
+    record.instance_id &&
+    (record.state === "RUNNING" || record.state === "STARTING" || record.state === "STOPPING")
+  ) {
     const instance = await describeInstance(record.instance_id);
     const instanceState = instance?.State?.Name;
     if (instance && instanceState !== "terminated" && instanceState !== "shutting-down") {
       if (instance.PublicIpAddress) {
         lines.push(`接続先: \`${config.serverFqdn}\` (${instance.PublicIpAddress})`);
       }
-      lines.push(`インスタンス: ${record.instance_id} / AZ: ${record.az ?? "?"} / タイプ: ${record.instance_type ?? "?"}`);
+      lines.push(
+        `インスタンス: ${record.instance_id} / AZ: ${record.az ?? "?"} / タイプ: ${record.instance_type ?? "?"}`,
+      );
       if (instance.LaunchTime) {
         lines.push(`稼働時間: ${formatUptime(instance.LaunchTime)}`);
       }
       if (record.az && record.instance_type) {
-        const price = await getCurrentSpotPrice(record.instance_type, record.az).catch(() => undefined);
+        const price = await getCurrentSpotPrice(record.instance_type, record.az).catch(
+          () => undefined,
+        );
         if (price !== undefined) {
-          lines.push(`現在のスポット価格: $${price.toFixed(4)}/時（起動時: $${record.spot_price?.toFixed(4) ?? "?"}/時）`);
+          lines.push(
+            `現在のスポット価格: $${price.toFixed(4)}/時（起動時: $${record.spot_price?.toFixed(4) ?? "?"}/時）`,
+          );
         }
       }
     } else {
-      lines.push(`⚠️ 記録上のインスタンス (${record.instance_id}) は既に終了しています。まもなくバックアップ処理が始まります。`);
+      lines.push(
+        `⚠️ 記録上のインスタンス (${record.instance_id}) は既に終了しています。まもなくバックアップ処理が始まります。`,
+      );
     }
   }
   lines.push(`最終更新: ${record.updated_at}`);

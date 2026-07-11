@@ -38,8 +38,8 @@ export interface WorkerPayload {
   options: Record<string, unknown>;
   applicationId: string;
   token: string;
-  channelId?: string;
-  invokedBy?: string;
+  channelId?: string | undefined;
+  invokedBy?: string | undefined;
 }
 
 const lambda = new LambdaClient({});
@@ -69,7 +69,10 @@ function respond(statusCode: number, body: unknown): FunctionUrlResult {
   };
 }
 
-function headerLookup(headers: Record<string, string | undefined>, name: string): string | undefined {
+function headerLookup(
+  headers: Record<string, string | undefined>,
+  name: string,
+): string | undefined {
   for (const [key, value] of Object.entries(headers)) {
     if (key.toLowerCase() === name) return value;
   }
@@ -92,8 +95,15 @@ export const handler = async (event: FunctionUrlEvent): Promise<FunctionUrlResul
     return respond(500, { error: "internal error" });
   }
 
-  if (!signature || !timestamp || !verifyDiscordSignature(rawBody, signature, timestamp, publicKey)) {
-    log("warn", "invalid request signature", { hasSignature: Boolean(signature), hasTimestamp: Boolean(timestamp) });
+  if (
+    !signature ||
+    !timestamp ||
+    !verifyDiscordSignature(rawBody, signature, timestamp, publicKey)
+  ) {
+    log("warn", "invalid request signature", {
+      hasSignature: Boolean(signature),
+      hasTimestamp: Boolean(timestamp),
+    });
     return respond(401, { error: "invalid request signature" });
   }
 
@@ -124,7 +134,10 @@ export const handler = async (event: FunctionUrlEvent): Promise<FunctionUrlResul
       channelId: interaction.channel_id,
       invokedBy: interaction.member?.user?.username ?? interaction.user?.username,
     };
-    log("info", "dispatching command to worker", { command: payload.command, invokedBy: payload.invokedBy });
+    log("info", "dispatching command to worker", {
+      command: payload.command,
+      invokedBy: payload.invokedBy,
+    });
     try {
       await lambda.send(
         new InvokeCommand({

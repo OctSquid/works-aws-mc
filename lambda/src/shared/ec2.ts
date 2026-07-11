@@ -48,7 +48,10 @@ export interface SpotCandidate {
  * 同価格は INSTANCE_TYPES の並び順を優先する。
  */
 export function buildSpotCandidates(
-  prices: readonly Pick<SpotPrice, "AvailabilityZone" | "InstanceType" | "SpotPrice" | "Timestamp">[],
+  prices: readonly Pick<
+    SpotPrice,
+    "AvailabilityZone" | "InstanceType" | "SpotPrice" | "Timestamp"
+  >[],
   subnetsByAz: Record<string, string>,
   instanceTypes: readonly string[],
 ): SpotCandidate[] {
@@ -82,7 +85,9 @@ export function buildSpotCandidates(
 }
 
 /** SUBNET_IDS から AZ → サブネットID のマップを作る */
-export async function getSubnetsByAz(subnetIds: readonly string[]): Promise<Record<string, string>> {
+export async function getSubnetsByAz(
+  subnetIds: readonly string[],
+): Promise<Record<string, string>> {
   const res = await ec2.send(new DescribeSubnetsCommand({ SubnetIds: [...subnetIds] }));
   const map: Record<string, string> = {};
   for (const subnet of res.Subnets ?? []) {
@@ -109,7 +114,10 @@ export async function fetchSpotCandidates(
 }
 
 /** 単一 AZ×タイプの現在スポット価格（/status 用） */
-export async function getCurrentSpotPrice(instanceType: string, az: string): Promise<number | undefined> {
+export async function getCurrentSpotPrice(
+  instanceType: string,
+  az: string,
+): Promise<number | undefined> {
   const res = await ec2.send(
     new DescribeSpotPriceHistoryCommand({
       InstanceTypes: [instanceType as _InstanceType],
@@ -130,7 +138,9 @@ export async function getCurrentSpotPrice(instanceType: string, az: string): Pro
 // ---------------------------------------------------------------------------
 
 /** 最新の completed データスナップショット（tag:mc:data=true）を返す */
-export async function findLatestDataSnapshot(): Promise<{ snapshotId: string; startTime?: Date } | undefined> {
+export async function findLatestDataSnapshot(): Promise<
+  { snapshotId: string; startTime?: Date | undefined } | undefined
+> {
   const res = await ec2.send(
     new DescribeSnapshotsCommand({
       OwnerIds: ["self"],
@@ -148,7 +158,9 @@ export async function findLatestDataSnapshot(): Promise<{ snapshotId: string; st
 }
 
 /** 孤児データボリューム（tag:mc:data=true かつ available）を返す */
-export async function findOrphanDataVolume(): Promise<{ volumeId: string; az: string } | undefined> {
+export async function findOrphanDataVolume(): Promise<
+  { volumeId: string; az: string } | undefined
+> {
   const res = await ec2.send(
     new DescribeVolumesCommand({
       Filters: [
@@ -177,7 +189,7 @@ export interface LaunchOptions {
    * データボリュームの BDM 上書き。undefined の場合はデータボリュームを作らない
    * （孤児ボリューム再利用時: 起動後に AttachVolume する）。
    */
-  dataVolume?: { snapshotId?: string; sizeGb: number };
+  dataVolume?: { snapshotId?: string | undefined; sizeGb: number } | undefined;
 }
 
 /**
@@ -233,7 +245,8 @@ export async function launchInstance(options: LaunchOptions): Promise<string> {
 
 /** 容量系エラー（次の候補へフォールバックすべきエラー）か判定する */
 export function isRetryableCapacityError(err: unknown): boolean {
-  const code = (err as { name?: string; Code?: string }).name ?? (err as { Code?: string }).Code ?? "";
+  const code =
+    (err as { name?: string; Code?: string }).name ?? (err as { Code?: string }).Code ?? "";
   if (code.startsWith("Unsupported")) return true;
   return [
     "InsufficientInstanceCapacity",
@@ -247,8 +260,8 @@ export function isRetryableCapacityError(err: unknown): boolean {
 export interface InstanceInfo {
   instance: Instance;
   publicIp?: string;
-  launchTime?: Date;
-  dataVolumeId?: string;
+  launchTime?: Date | undefined;
+  dataVolumeId?: string | undefined;
 }
 
 export async function describeInstance(instanceId: string): Promise<Instance | undefined> {
@@ -274,8 +287,9 @@ export async function waitForInstance(
       throw new Error(`インスタンス ${instanceId} は起動前に終了しました (${stateName})`);
     }
     if (instance?.PublicIpAddress && stateName === "running") {
-      const dataVolumeId = instance.BlockDeviceMappings?.find((m) => m.DeviceName === DATA_DEVICE_NAME)?.Ebs
-        ?.VolumeId;
+      const dataVolumeId = instance.BlockDeviceMappings?.find(
+        (m) => m.DeviceName === DATA_DEVICE_NAME,
+      )?.Ebs?.VolumeId;
       return {
         instance,
         publicIp: instance.PublicIpAddress,
@@ -292,7 +306,11 @@ export async function waitForInstance(
 
 export async function attachDataVolume(volumeId: string, instanceId: string): Promise<void> {
   await ec2.send(
-    new AttachVolumeCommand({ VolumeId: volumeId, InstanceId: instanceId, Device: DATA_DEVICE_NAME }),
+    new AttachVolumeCommand({
+      VolumeId: volumeId,
+      InstanceId: instanceId,
+      Device: DATA_DEVICE_NAME,
+    }),
   );
   log("info", "orphan data volume attached", { volumeId, instanceId });
 }
@@ -350,7 +368,10 @@ export async function waitForVolumeAvailable(
 }
 
 /** データボリュームのスナップショットを作成する */
-export async function createDataSnapshot(volumeId: string, now: Date = new Date()): Promise<string> {
+export async function createDataSnapshot(
+  volumeId: string,
+  now: Date = new Date(),
+): Promise<string> {
   const res = await ec2.send(
     new CreateSnapshotCommand({
       VolumeId: volumeId,
@@ -389,7 +410,10 @@ export async function deleteVolumeIfExists(volumeId: string): Promise<boolean> {
  * 古いデータスナップショットを整理する。
  * 新しい順に retention 世代残して削除。protectSnapshotId（今回作成分）は絶対に消さない。
  */
-export async function cleanupOldSnapshots(retention: number, protectSnapshotId?: string): Promise<string[]> {
+export async function cleanupOldSnapshots(
+  retention: number,
+  protectSnapshotId?: string,
+): Promise<string[]> {
   const res = await ec2.send(
     new DescribeSnapshotsCommand({
       OwnerIds: ["self"],
@@ -402,7 +426,9 @@ export async function cleanupOldSnapshots(retention: number, protectSnapshotId?:
   const sorted = (res.Snapshots ?? [])
     .filter((s): s is Snapshot & { SnapshotId: string } => Boolean(s.SnapshotId))
     .sort((a, b) => (b.StartTime?.getTime() ?? 0) - (a.StartTime?.getTime() ?? 0));
-  const toDelete = sorted.slice(Math.max(retention, 1)).filter((s) => s.SnapshotId !== protectSnapshotId);
+  const toDelete = sorted
+    .slice(Math.max(retention, 1))
+    .filter((s) => s.SnapshotId !== protectSnapshotId);
   const deleted: string[] = [];
   for (const snapshot of toDelete) {
     try {
@@ -410,7 +436,10 @@ export async function cleanupOldSnapshots(retention: number, protectSnapshotId?:
       deleted.push(snapshot.SnapshotId);
       log("info", "old snapshot deleted", { snapshotId: snapshot.SnapshotId });
     } catch (err) {
-      log("warn", "failed to delete old snapshot", { snapshotId: snapshot.SnapshotId, error: String(err) });
+      log("warn", "failed to delete old snapshot", {
+        snapshotId: snapshot.SnapshotId,
+        error: String(err),
+      });
     }
   }
   return deleted;

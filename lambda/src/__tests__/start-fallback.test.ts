@@ -18,17 +18,19 @@ const ec2Mock = mockClient(EC2Client);
 const route53Mock = mockClient(Route53Client);
 const ddbMock = mockClient(DynamoDBDocumentClient);
 
-const fetchMock = vi.fn(async () => ({ ok: true, status: 200, text: async () => "" }));
+const fetchMock = vi.fn<
+  (
+    url: string,
+    init?: { body?: string },
+  ) => Promise<{ ok: boolean; status: number; text: () => Promise<string> }>
+>(async () => ({ ok: true, status: 200, text: async () => "" }));
 
 function capacityError(code: string): Error {
   return Object.assign(new Error(`capacity: ${code}`), { name: code });
 }
 
 function fetchBodies(): string[] {
-  return fetchMock.mock.calls.map((call) => {
-    const init = (call as unknown as [string, { body?: string }])[1];
-    return init?.body ?? "";
-  });
+  return fetchMock.mock.calls.map(([, init]) => init?.body ?? "");
 }
 
 const START_EVENT = {
@@ -55,13 +57,15 @@ describe("/start の候補フォールバック", () => {
     ddbMock.reset();
 
     // 状態遷移は常に成功させる（排他は state.test.ts で検証済み）
-    ddbMock.on(UpdateCommand).callsFake((input: { ExpressionAttributeValues?: Record<string, unknown> }) => ({
-      Attributes: {
-        pk: "server",
-        state: input.ExpressionAttributeValues?.[":to"],
-        updated_at: new Date().toISOString(),
-      },
-    }));
+    ddbMock
+      .on(UpdateCommand)
+      .callsFake((input: { ExpressionAttributeValues?: Record<string, unknown> }) => ({
+        Attributes: {
+          pk: "server",
+          state: input.ExpressionAttributeValues?.[":to"],
+          updated_at: new Date().toISOString(),
+        },
+      }));
 
     // 孤児ボリューム: 無し
     ec2Mock.on(DescribeVolumesCommand).resolves({ Volumes: [] });
@@ -79,9 +83,24 @@ describe("/start の候補フォールバック", () => {
     // 価格: 1a/m7a が最安、次点 1c/m7i
     ec2Mock.on(DescribeSpotPriceHistoryCommand).resolves({
       SpotPriceHistory: [
-        { AvailabilityZone: "ap-northeast-1a", InstanceType: "m7a.large", SpotPrice: "0.0400", Timestamp: new Date() },
-        { AvailabilityZone: "ap-northeast-1c", InstanceType: "m7i.large", SpotPrice: "0.0500", Timestamp: new Date() },
-        { AvailabilityZone: "ap-northeast-1d", InstanceType: "m6a.large", SpotPrice: "0.0600", Timestamp: new Date() },
+        {
+          AvailabilityZone: "ap-northeast-1a",
+          InstanceType: "m7a.large",
+          SpotPrice: "0.0400",
+          Timestamp: new Date(),
+        },
+        {
+          AvailabilityZone: "ap-northeast-1c",
+          InstanceType: "m7i.large",
+          SpotPrice: "0.0500",
+          Timestamp: new Date(),
+        },
+        {
+          AvailabilityZone: "ap-northeast-1d",
+          InstanceType: "m6a.large",
+          SpotPrice: "0.0600",
+          Timestamp: new Date(),
+        },
       ],
     });
     ec2Mock.on(DescribeInstancesCommand).resolves({
@@ -162,7 +181,9 @@ describe("/start の候補フォールバック", () => {
 
     // followup に接続情報が含まれる
     const bodies = fetchBodies();
-    expect(bodies.some((b) => b.includes("mc.example.com") && b.includes("203.0.113.10"))).toBe(true);
+    expect(bodies.some((b) => b.includes("mc.example.com") && b.includes("203.0.113.10"))).toBe(
+      true,
+    );
   });
 
   it("SpotMaxPriceTooLow / Unsupported 系も次候補へフォールバックする", async () => {
@@ -198,7 +219,9 @@ describe("/start の候補フォールバック", () => {
   });
 
   it("容量系以外のエラーは即中断し、state を戻してエラー通知する", async () => {
-    ec2Mock.on(RunInstancesCommand).rejects(Object.assign(new Error("認証エラー"), { name: "UnauthorizedOperation" }));
+    ec2Mock
+      .on(RunInstancesCommand)
+      .rejects(Object.assign(new Error("認証エラー"), { name: "UnauthorizedOperation" }));
 
     await handler(START_EVENT);
 
@@ -224,7 +247,9 @@ describe("/start の候補フォールバック", () => {
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-ok" }] });
     // terminated として返す → waitForInstance が失敗する
     ec2Mock.on(DescribeInstancesCommand).resolves({
-      Reservations: [{ Instances: [{ InstanceId: "i-ok", State: { Name: "terminated" as const } }] }],
+      Reservations: [
+        { Instances: [{ InstanceId: "i-ok", State: { Name: "terminated" as const } }] },
+      ],
     });
 
     await handler(START_EVENT);

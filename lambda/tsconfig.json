@@ -4,12 +4,23 @@
     "lib": ["ES2023"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "moduleDetection": "force",
+
+    // 型チェック（strict + 追加の厳格化）
     "strict": true,
     "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
-    "esModuleInterop": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+
+    // esbuild / tsx などトランスパイラ単体で安全に処理できる構文に限定する
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
     "isolatedModules": true,
+
+    "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "noEmit": true,

@@ -2,11 +2,8 @@
   "name": "mc-lambda",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "description": "Lambda functions for the on-demand Minecraft server control plane",
-  "engines": {
-    "node": ">=22"
-  },
+  "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && node esbuild.config.mjs",
@@ -24,8 +21,11 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "aws-sdk-client-mock": "^4.1.0",
-    "esbuild": "^0.25.0",
-    "typescript": "^5.5.0",
-    "vitest": "^3.0.0"
+    "esbuild": "^0.28.0",
+    "typescript": "^7.0.0",
+    "vitest": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

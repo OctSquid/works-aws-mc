@@ -159,8 +159,13 @@ aws ssm send-command --instance-ids "$INSTANCE_ID" \
 `plugins.json` の `plugins` 配列に 1 エントリ追加する。対応ソース: `hangar`（PaperMC 公式・推奨）/ `modrinth` / `github` / `geysermc` / `curseforge`（要 API キー）/ `url` / `local`（手動入手 jar を `server-config/plugins-local/` に置く）。
 
 ```jsonc
-{ "name": "VeinMiner", "source": "hangar", "id": "VeinMiner", "version": "latest",
-  "preserve": ["plugins/VeinMiner/*.db"] }
+{
+  "name": "VeinMiner",
+  "source": "hangar",
+  "id": "VeinMiner",
+  "version": "latest",
+  "preserve": ["plugins/VeinMiner/*.db"],
+}
 ```
 
 - **`preserve` を必ず検討すること**: プレイヤーデータやセーブ依存ファイルのパターンを書くと、AMI 更新時も上書きされず保持される
@@ -190,6 +195,17 @@ cd ../../docker && docker compose up --build
 > JVM の JIT が SIGSEGV でクラッシュすることがある。ネイティブ arch の VM（`colima start --arch aarch64 --vm-type vz`
 > や Docker Desktop）を使うこと。応急処置は `JAVA_TOOL_OPTIONS=-Xint`（非常に遅い）。
 
+### Lint / Format
+
+リポジトリ全体を [oxlint](https://oxc.rs/docs/guide/usage/linter) / [oxfmt](https://oxc.rs/docs/guide/usage/formatter) で検査・整形する（CI の `lint` ワークフローでも同じチェックが走る）。
+
+```sh
+npm ci            # リポジトリルートで（初回のみ）
+npm run lint      # oxlint（.oxlintrc.json）
+npm run fmt       # oxfmt で整形（.oxfmtrc.json）
+npm run fmt:check # 整形差分の検査のみ（CI と同じ）
+```
+
 ## 障害時リカバリ
 
 | 症状                                  | 対応                                                                                                                                                        |
@@ -202,14 +218,14 @@ cd ../../docker && docker compose up --build
 
 ## リソースのライフサイクル（何が残り、何が自動で消えるか）
 
-| リソース | 挙動 | 課金 |
-| --- | --- | --- |
-| ゲーム用インスタンス | `/stop`・自動停止・スポット中断で **terminate**。コンソールには約1時間 `terminated` 表示で残るが、これは AWS の表示仕様で**実体はなく課金もない** | 稼働中のみ |
-| Packer ビルド用インスタンス (t3.medium) | ビルド完了時に Packer が terminate（上と同様にしばらく表示は残る） | ビルド中のみ（スポット・数分） |
-| データ用 EBS ボリューム | terminate 後に lifecycle Lambda がスナップショット化 → **削除**。残るのは異常時のみ（データ保全のため意図的に残す） | 稼働中のみ |
-| ワールドスナップショット (20GB) | 停止のたびに1つ作成、**直近 `snapshot_retention` 世代（現在3）を残して自動削除**。毎回別ボリューム由来のため増分にならず、実使用量×世代数で課金される点に注意 | ~$0.05/GB・月 × 実使用量 × 世代数 |
-| AMI | ビルドのたびに作成、**最新2世代を残して自動 deregister**（付随する 8GB スナップショットも削除） | 実使用 ~3GB × 2世代 ≈ $0.3/月 |
-| Route53 A レコード | terminate 時に lifecycle Lambda が削除 | zone 代のみ |
+| リソース                                | 挙動                                                                                                                                                          | 課金                              |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| ゲーム用インスタンス                    | `/stop`・自動停止・スポット中断で **terminate**。コンソールには約1時間 `terminated` 表示で残るが、これは AWS の表示仕様で**実体はなく課金もない**             | 稼働中のみ                        |
+| Packer ビルド用インスタンス (t3.medium) | ビルド完了時に Packer が terminate（上と同様にしばらく表示は残る）                                                                                            | ビルド中のみ（スポット・数分）    |
+| データ用 EBS ボリューム                 | terminate 後に lifecycle Lambda がスナップショット化 → **削除**。残るのは異常時のみ（データ保全のため意図的に残す）                                           | 稼働中のみ                        |
+| ワールドスナップショット (20GB)         | 停止のたびに1つ作成、**直近 `snapshot_retention` 世代（現在3）を残して自動削除**。毎回別ボリューム由来のため増分にならず、実使用量×世代数で課金される点に注意 | ~$0.05/GB・月 × 実使用量 × 世代数 |
+| AMI                                     | ビルドのたびに作成、**最新2世代を残して自動 deregister**（付随する 8GB スナップショットも削除）                                                               | 実使用 ~3GB × 2世代 ≈ $0.3/月     |
+| Route53 A レコード                      | terminate 時に lifecycle Lambda が削除                                                                                                                        | zone 代のみ                       |
 
 つまり**停止中に残るのは「スナップショット類 + Route53 zone」だけ**（合計 $1〜2/月 程度）。
 コンソールで「インスタンスが溜まっている」ように見えたら、まず State 列が `terminated` かを確認すること。

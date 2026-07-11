@@ -84,8 +84,16 @@ describe("buildSpotCandidates（スポット価格ソート）", () => {
   it("価格が空・不正なエントリは無視する", () => {
     const candidates = buildSpotCandidates(
       [
-        { AvailabilityZone: "ap-northeast-1a", InstanceType: "m7a.large" as never, SpotPrice: undefined },
-        { AvailabilityZone: "ap-northeast-1a", InstanceType: "m7a.large" as never, SpotPrice: "abc" },
+        {
+          AvailabilityZone: "ap-northeast-1a",
+          InstanceType: "m7a.large" as never,
+          SpotPrice: undefined,
+        },
+        {
+          AvailabilityZone: "ap-northeast-1a",
+          InstanceType: "m7a.large" as never,
+          SpotPrice: "abc",
+        },
       ],
       SUBNETS,
       TYPES,

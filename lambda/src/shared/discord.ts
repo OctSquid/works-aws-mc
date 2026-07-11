@@ -28,7 +28,12 @@ export function verifyDiscordSignature(
   }
 }
 
-async function discordRequest(url: string, method: string, body: unknown, logLabel: string): Promise<void> {
+async function discordRequest(
+  url: string,
+  method: string,
+  body: unknown,
+  logLabel: string,
+): Promise<void> {
   try {
     const res = await fetch(url, {
       method,
@@ -37,7 +42,12 @@ async function discordRequest(url: string, method: string, body: unknown, logLab
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      log("error", "discord api request failed", { label: logLabel, method, status: res.status, response: text.slice(0, 500) });
+      log("error", "discord api request failed", {
+        label: logLabel,
+        method,
+        status: res.status,
+        response: text.slice(0, 500),
+      });
     }
   } catch (err) {
     log("error", "discord api request threw", { label: logLabel, method, error: String(err) });
@@ -45,7 +55,11 @@ async function discordRequest(url: string, method: string, body: unknown, logLab
 }
 
 /** deferred 応答（@original）を編集する（初回 followup 用: PATCH） */
-export async function editOriginalResponse(applicationId: string, token: string, content: string): Promise<void> {
+export async function editOriginalResponse(
+  applicationId: string,
+  token: string,
+  content: string,
+): Promise<void> {
   await discordRequest(
     `${DISCORD_API_BASE}/webhooks/${applicationId}/${token}/messages/@original`,
     "PATCH",
@@ -55,8 +69,17 @@ export async function editOriginalResponse(applicationId: string, token: string,
 }
 
 /** 追加の followup メッセージを送信する（POST） */
-export async function sendFollowup(applicationId: string, token: string, content: string): Promise<void> {
-  await discordRequest(`${DISCORD_API_BASE}/webhooks/${applicationId}/${token}`, "POST", { content }, "followup");
+export async function sendFollowup(
+  applicationId: string,
+  token: string,
+  content: string,
+): Promise<void> {
+  await discordRequest(
+    `${DISCORD_API_BASE}/webhooks/${applicationId}/${token}`,
+    "POST",
+    { content },
+    "followup",
+  );
 }
 
 /** Webhook URL（SSM /mc/discord/webhook-url）へ通知を送信する */

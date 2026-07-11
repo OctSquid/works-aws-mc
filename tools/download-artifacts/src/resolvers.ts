@@ -77,7 +77,9 @@ export async function downloadPlugin(
     case "modrinth": {
       const versions = await fetchJson<
         { version_number: string; loaders: string[]; files: { url: string; primary: boolean }[] }[]
-      >(`https://api.modrinth.com/v2/project/${plugin.id}/version?loaders=${encodeURIComponent('["paper","spigot"]')}`);
+      >(
+        `https://api.modrinth.com/v2/project/${plugin.id}/version?loaders=${encodeURIComponent('["paper","spigot"]')}`,
+      );
       const target =
         plugin.version === "latest"
           ? versions[0]

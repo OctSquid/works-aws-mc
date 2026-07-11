@@ -74,13 +74,19 @@ export interface TransitionInput {
  * または stealable 状態かつ updated_at が15分以上前（スタック回復）。
  */
 export async function transitionState(input: TransitionInput): Promise<TransitionResult> {
-  const fromStates = Array.isArray(input.from) ? (input.from as ServerState[]) : [input.from as ServerState];
+  const fromStates = Array.isArray(input.from)
+    ? (input.from as ServerState[])
+    : [input.from as ServerState];
   const now = input.now ?? new Date();
   const nowIso = now.toISOString();
   const staleBefore = new Date(now.getTime() - STALE_TAKEOVER_MS).toISOString();
 
   const names: Record<string, string> = { "#state": "state", "#updated_at": "updated_at" };
-  const values: Record<string, unknown> = { ":to": input.to, ":now": nowIso, ":staleBefore": staleBefore };
+  const values: Record<string, unknown> = {
+    ":to": input.to,
+    ":now": nowIso,
+    ":staleBefore": staleBefore,
+  };
 
   const setParts = ["#state = :to", "#updated_at = :now"];
   for (const [key, value] of Object.entries(input.set ?? {})) {
@@ -126,7 +132,11 @@ export async function transitionState(input: TransitionInput): Promise<Transitio
   } catch (err) {
     if ((err as { name?: string }).name === "ConditionalCheckFailedException") {
       const current = await getServerRecord().catch(() => undefined);
-      log("warn", "state transition rejected", { from: fromStates, to: input.to, currentState: current?.state });
+      log("warn", "state transition rejected", {
+        from: fromStates,
+        to: input.to,
+        currentState: current?.state,
+      });
       return { ok: false, currentState: current?.state };
     }
     throw err;

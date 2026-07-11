@@ -96,7 +96,8 @@ async function onInstanceTerminated(instanceId: string): Promise<void> {
   // データボリュームの特定: state 記録 → インスタンス BDM → タグ検索
   let volumeId = record?.volume_id;
   if (!volumeId) {
-    volumeId = instance.BlockDeviceMappings?.find((m) => m.DeviceName === DATA_DEVICE_NAME)?.Ebs?.VolumeId;
+    volumeId = instance.BlockDeviceMappings?.find((m) => m.DeviceName === DATA_DEVICE_NAME)?.Ebs
+      ?.VolumeId;
   }
   if (!volumeId) {
     volumeId = (await findOrphanDataVolume().catch(() => undefined))?.volumeId;
@@ -104,7 +105,10 @@ async function onInstanceTerminated(instanceId: string): Promise<void> {
 
   if (!volumeId) {
     if (record?.state === "STOPPED" || record?.state === "SNAPSHOTTING") {
-      log("info", "no data volume found and state already settled, ignoring", { instanceId, state: record?.state });
+      log("info", "no data volume found and state already settled, ignoring", {
+        instanceId,
+        state: record?.state,
+      });
       return;
     }
     log("error", "data volume not found for terminated instance", { instanceId });
@@ -191,7 +195,9 @@ async function onSnapshotEvent(detail: Record<string, unknown>): Promise<void> {
       await deleteVolumeIfExists(volumeId);
     } catch (err) {
       log("error", "failed to delete volume", { volumeId, error: errorMessage(err) });
-      await notify(`⚠️ バックアップ後のボリューム削除に失敗しました (\`${volumeId}\`): ${errorMessage(err)}`);
+      await notify(
+        `⚠️ バックアップ後のボリューム削除に失敗しました (\`${volumeId}\`): ${errorMessage(err)}`,
+      );
     }
   } else {
     log("warn", "no volume id to delete", { snapshotId });
@@ -222,4 +228,4 @@ async function onSnapshotEvent(detail: Record<string, unknown>): Promise<void> {
   }
 
   await notify("✅ バックアップ完了。`/start` で再開できます。");
-};
+}

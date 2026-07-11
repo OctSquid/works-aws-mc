@@ -1,15 +1,15 @@
 {
   "name": "register-commands",
   "private": true,
-  "type": "module",
   "description": "Discord Slash Commands (guild commands) を登録する",
+  "type": "module",
   "scripts": {
     "register": "tsx src/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "tsx": "^4.23.0",
+    "typescript": "^7.0.0"
   }
 }

@@ -21,7 +21,9 @@ export function clearSsmParameterCache(): void {
 export async function getParameter(name: string, withDecryption = true): Promise<string> {
   const cached = parameterCache.get(name);
   if (cached !== undefined) return cached;
-  const res = await ssm.send(new GetParameterCommand({ Name: name, WithDecryption: withDecryption }));
+  const res = await ssm.send(
+    new GetParameterCommand({ Name: name, WithDecryption: withDecryption }),
+  );
   const value = res.Parameter?.Value;
   if (value === undefined || value === "") {
     throw new Error(`SSM パラメータ ${name} が空です`);
@@ -31,7 +33,10 @@ export async function getParameter(name: string, withDecryption = true): Promise
 }
 
 /** AWS-RunShellScript でインスタンス上のシェルコマンドを実行する */
-export async function runShellCommand(instanceId: string, commands: string[]): Promise<string | undefined> {
+export async function runShellCommand(
+  instanceId: string,
+  commands: string[],
+): Promise<string | undefined> {
   const res = await ssm.send(
     new SendCommandCommand({
       DocumentName: "AWS-RunShellScript",

@@ -1,13 +1,10 @@
 {
-	"servers": {
-		"AWS MCP Server": {
-			"command": "uvx",
-			"args": [
-				"mcp-proxy-for-aws@latest",
-				"https://aws-mcp.us-east-1.api.aws/mcp"
-			],
-			"type": "stdio"
-		}
-	},
-	"inputs": []
+  "servers": {
+    "AWS MCP Server": {
+      "command": "uvx",
+      "args": ["mcp-proxy-for-aws@latest", "https://aws-mcp.us-east-1.api.aws/mcp"],
+      "type": "stdio"
+    }
+  },
+  "inputs": []
 }
