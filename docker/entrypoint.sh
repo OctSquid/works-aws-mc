@@ -9,4 +9,4 @@ export DATA=/srv/minecraft
 /opt/minecraft/bin/sync-dist.sh
 /opt/minecraft/bin/render-config.sh
 
-exec runuser -u minecraft -- /opt/minecraft/bin/mc-start.sh
+exec su-exec minecraft /opt/minecraft/bin/mc-start.sh

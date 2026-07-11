@@ -191,6 +191,9 @@ cd ../../docker && docker compose up --build
   （Windows の Bedrock 版は loopback 制限の解除が必要: `CheckNetIsolation LoopbackExempt -a -n=Microsoft.MinecraftUWP_8wekyb3d8bbwe`）
 - ワールドは `docker/data/` に永続化される。`docker compose down` →再作成でも残ることを確認できる
 - RCON テスト: `docker compose exec minecraft /opt/minecraft/bin/rcon.sh list`
+- イメージは Alpine ベース（JVM は Temurin JRE 25。本番は Corretto 25 だがともに OpenJDK ビルドで実質同等）。
+  musl のため AL2023 の完全再現ではないが、検証の目的は共有プロビジョニングスクリプトと
+  Paper の動作確認であり、そこは維持される
 
 > **注意（Apple Silicon）**: Docker デーモンが x86_64 エミュレーション（colima の x86_64 VM 等）の場合、
 > JVM の JIT が SIGSEGV でクラッシュすることがある。ネイティブ arch の VM（`colima start --arch aarch64 --vm-type vz`
