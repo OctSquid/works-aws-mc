@@ -1,4 +1,6 @@
 {
+  // Edge Tools (webhint) が古い tsconfig スキーマ (ES2022 まで) で誤検知するため無効化
+  "vscode-edge-devtools.webhint": false,
   "cSpell.words": [
     "aikars",
     "amazonlinux",
