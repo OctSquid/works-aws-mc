@@ -1,0 +1,12 @@
+# compose の context がリポジトリルートのため、ビルドに不要なものを除外する
+# （必要なのは artifacts/ と server-config/、docker/entrypoint.sh のみ）
+.git
+node_modules
+**/node_modules
+docker/data
+terraform
+lambda
+tools
+packer
+.github
+*.md
