@@ -1,4 +1,5 @@
 {
+  "$schema": "./plugins.schema.json",
   "plugins": [
     {
       "name": "Geyser-Spigot",
@@ -16,6 +17,14 @@
       "source": "hangar",
       "id": "ViaVersion",
       "version": "latest"
+    },
+    {
+      "name": "GeyserSkinManager",
+      "source": "github",
+      "repo": "MusclePr/GeyserSkinManager",
+      "version": "1.10-SNAPSHOT",
+      "assetPattern": "^GeyserSkinManager-Spigot\\.jar$",
+      "preserve": ["plugins/GeyserSkinManager/users/*"]
     }
   ]
 }
