@@ -6,7 +6,11 @@ set -euo pipefail
 RCON_CLI_VERSION="${RCON_CLI_VERSION:-1.6.11}"
 
 # Minecraft 26.1+ は Java 25 以上が必要
-dnf install -y java-25-amazon-corretto-headless jq rsync
+# amazon-ssm-agent / awscli-2 は minimal AMI に含まれないため明示的に入れる
+# （SSM RunCommand と render-config.sh の `aws ssm get-parameter` が依存）
+# tar / gzip は rcon-cli 展開用（標準 AMI では no-op）
+dnf install -y java-25-amazon-corretto-headless jq rsync amazon-ssm-agent awscli-2 tar gzip
+systemctl enable amazon-ssm-agent
 
 useradd -r -m -d /var/lib/minecraft -s /sbin/nologin minecraft
 

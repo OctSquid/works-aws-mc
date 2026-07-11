@@ -38,7 +38,8 @@ source "amazon-ebs" "minecraft" {
 
   source_ami_filter {
     filters = {
-      name                = "al2023-ami-2023.*-${local.architecture}"
+      # minimal AMI: SSM Agent / awscli は入っていないため install.sh で追加する
+      name                = "al2023-ami-minimal-2023.*-${local.architecture}"
       root-device-type    = "ebs"
       virtualization-type = "hvm"
     }
