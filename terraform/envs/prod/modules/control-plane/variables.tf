@@ -72,7 +72,7 @@ variable "log_retention_days" {
 variable "lambda_runtime" {
   description = "Lambda ランタイム"
   type        = string
-  default     = "nodejs22.x"
+  default     = "nodejs24.x"
 }
 
 variable "lambda_memory_mb" {
