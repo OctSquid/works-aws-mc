@@ -103,10 +103,11 @@ resource "aws_lambda_function" "this" {
   filename         = data.archive_file.lambda[each.key].output_path
   source_code_hash = data.archive_file.lambda[each.key].output_base64sha256
 
-  runtime     = var.lambda_runtime
-  handler     = "index.handler" # ESM（dist 側の package.json で type: module）
-  timeout     = each.value.timeout
-  memory_size = var.lambda_memory_mb
+  runtime       = var.lambda_runtime
+  architectures = ["arm64"]       # 依存は pure JS のみ。Graviton で GB-秒あたり約 20% 安い
+  handler       = "index.handler" # ESM（dist 側の package.json で type: module）
+  timeout       = each.value.timeout
+  memory_size   = var.lambda_memory_mb
 
   environment {
     variables = each.value.env
