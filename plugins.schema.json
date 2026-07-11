@@ -1,0 +1,201 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "plugins.schema.json",
+  "title": "plugins.json",
+  "description": "サーバーに配置するプラグインの定義。tools/download-artifacts が読み込んで jar を解決・ダウンロードする（真実の源: tools/download-artifacts/src/types.ts の PluginSpec）",
+  "type": "object",
+  "required": ["plugins"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "この plugins.schema.json への参照"
+    },
+    "plugins": {
+      "type": "array",
+      "description": "プラグインのリスト。source の値によって必須フィールドが変わる",
+      "items": {
+        "$ref": "#/definitions/plugin"
+      }
+    }
+  },
+  "definitions": {
+    "name": {
+      "type": "string",
+      "description": "プラグイン名。ダウンロード後の jar ファイル名（<name>.jar）にも使われる",
+      "minLength": 1
+    },
+    "preserve": {
+      "type": "array",
+      "description": "同期（sync-dist.sh）時に上書き・削除から保護するパスのリスト（例: plugins/floodgate/key.pem）",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "version": {
+      "type": "string",
+      "description": "バージョン指定。\"latest\" または具体的なバージョン文字列",
+      "minLength": 1
+    },
+    "sha256": {
+      "type": "string",
+      "description": "ダウンロードした jar の SHA-256 チェックサム（16進64文字、小文字）。指定すると検証される",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "plugin": {
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "GeyserMC download API から最新ビルドを取得",
+          "required": ["name", "source", "project"],
+          "additionalProperties": false,
+          "properties": {
+            "name": { "$ref": "#/definitions/name" },
+            "source": {
+              "const": "geysermc",
+              "description": "GeyserMC download API（常に latest）"
+            },
+            "project": {
+              "type": "string",
+              "description": "GeyserMC のプロジェクト名（例: geyser, floodgate）",
+              "minLength": 1
+            },
+            "preserve": { "$ref": "#/definitions/preserve" }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Hangar (PaperMC) からダウンロード",
+          "required": ["name", "source", "id", "version"],
+          "additionalProperties": false,
+          "properties": {
+            "name": { "$ref": "#/definitions/name" },
+            "source": {
+              "const": "hangar",
+              "description": "Hangar (hangar.papermc.io)"
+            },
+            "id": {
+              "type": "string",
+              "description": "Hangar のプロジェクト ID（例: ViaVersion）",
+              "minLength": 1
+            },
+            "version": { "$ref": "#/definitions/version" },
+            "preserve": { "$ref": "#/definitions/preserve" }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Modrinth からダウンロード",
+          "required": ["name", "source", "id", "version"],
+          "additionalProperties": false,
+          "properties": {
+            "name": { "$ref": "#/definitions/name" },
+            "source": {
+              "const": "modrinth",
+              "description": "Modrinth (modrinth.com)"
+            },
+            "id": {
+              "type": "string",
+              "description": "Modrinth のプロジェクト ID または slug",
+              "minLength": 1
+            },
+            "version": { "$ref": "#/definitions/version" },
+            "preserve": { "$ref": "#/definitions/preserve" }
+          }
+        },
+        {
+          "type": "object",
+          "description": "GitHub Releases のアセットからダウンロード",
+          "required": ["name", "source", "repo", "version", "assetPattern"],
+          "additionalProperties": false,
+          "properties": {
+            "name": { "$ref": "#/definitions/name" },
+            "source": {
+              "const": "github",
+              "description": "GitHub Releases（GITHUB_TOKEN があれば利用）"
+            },
+            "repo": {
+              "type": "string",
+              "description": "リポジトリ（owner/repo 形式）",
+              "pattern": "^[^/\\s]+/[^/\\s]+$"
+            },
+            "version": {
+              "type": "string",
+              "description": "リリースタグ。\"latest\" または具体的なタグ名",
+              "minLength": 1
+            },
+            "assetPattern": {
+              "type": "string",
+              "description": "ダウンロードするアセット名にマッチさせるパターン",
+              "minLength": 1
+            },
+            "sha256": { "$ref": "#/definitions/sha256" },
+            "preserve": { "$ref": "#/definitions/preserve" }
+          }
+        },
+        {
+          "type": "object",
+          "description": "CurseForge からダウンロード（環境変数 CURSEFORGE_API_KEY が必要）",
+          "required": ["name", "source", "projectId", "fileId"],
+          "additionalProperties": false,
+          "properties": {
+            "name": { "$ref": "#/definitions/name" },
+            "source": {
+              "const": "curseforge",
+              "description": "CurseForge（CURSEFORGE_API_KEY 必須）"
+            },
+            "projectId": {
+              "type": "number",
+              "description": "CurseForge のプロジェクト ID（数値）"
+            },
+            "fileId": {
+              "type": "number",
+              "description": "CurseForge のファイル ID（数値）"
+            },
+            "preserve": { "$ref": "#/definitions/preserve" }
+          }
+        },
+        {
+          "type": "object",
+          "description": "URL から直接ダウンロード",
+          "required": ["name", "source", "url"],
+          "additionalProperties": false,
+          "properties": {
+            "name": { "$ref": "#/definitions/name" },
+            "source": {
+              "const": "url",
+              "description": "URL 直接指定"
+            },
+            "url": {
+              "type": "string",
+              "description": "jar のダウンロード URL",
+              "pattern": "^https?://"
+            },
+            "sha256": { "$ref": "#/definitions/sha256" },
+            "preserve": { "$ref": "#/definitions/preserve" }
+          }
+        },
+        {
+          "type": "object",
+          "description": "リポジトリ内のローカルファイルをコピー",
+          "required": ["name", "source", "path"],
+          "additionalProperties": false,
+          "properties": {
+            "name": { "$ref": "#/definitions/name" },
+            "source": {
+              "const": "local",
+              "description": "リポジトリルートからの相対パスでコピー"
+            },
+            "path": {
+              "type": "string",
+              "description": "jar のパス（リポジトリルートからの相対）",
+              "minLength": 1
+            },
+            "preserve": { "$ref": "#/definitions/preserve" }
+          }
+        }
+      ]
+    }
+  }
+}
