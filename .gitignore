@@ -8,6 +8,8 @@ dist/
 *.tfstate
 *.tfstate.backup
 *.tfplan
+tfplan
+plan.txt
 .terraform.lock.hcl.backup
 terraform/bootstrap/terraform.tfstate*
 
