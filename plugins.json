@@ -13,18 +13,18 @@
       "preserve": ["plugins/floodgate/key.pem"]
     },
     {
-      "name": "ViaVersion",
-      "source": "hangar",
-      "id": "ViaVersion",
-      "version": "latest"
-    },
-    {
       "name": "GeyserSkinManager",
       "source": "github",
       "repo": "MusclePr/GeyserSkinManager",
       "version": "1.10-SNAPSHOT",
       "assetPattern": "^GeyserSkinManager-Spigot\\.jar$",
       "preserve": ["plugins/GeyserSkinManager/users/*"]
+    },
+    {
+      "name": "ViaVersion",
+      "source": "hangar",
+      "id": "ViaVersion",
+      "version": "latest"
     }
   ]
 }
