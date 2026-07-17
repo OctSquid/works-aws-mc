@@ -24,7 +24,13 @@ variable "data_volume_size_gb" {
 variable "snapshot_retention" {
   description = "データボリュームのスナップショット保持世代数（超過分は lifecycle Lambda が削除）"
   type        = number
-  default     = 7
+  default     = 3
+}
+
+variable "max_runtime_hours" {
+  description = "サーバーの最大連続稼働時間。超過すると watchdog tick（lifecycle Lambda）が強制停止する（インスタンス上の idle-watchdog が壊れた場合のコスト暴走対策）"
+  type        = number
+  default     = 12
 }
 
 variable "budget_limit_usd" {

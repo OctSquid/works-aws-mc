@@ -63,6 +63,16 @@ variable "snapshot_retention" {
   type        = number
 }
 
+variable "max_runtime_hours" {
+  description = "最大連続稼働時間。watchdog tick が超過インスタンスを強制停止する"
+  type        = number
+}
+
+variable "alert_email" {
+  description = "Lambda 失敗・エラーアラームの通知先メールアドレス（SNS サブスクリプション）"
+  type        = string
+}
+
 variable "ec2_instance_role_arn" {
   description = "EC2 インスタンスロールの ARN（command-worker の iam:PassRole 対象）"
   type        = string

@@ -66,7 +66,11 @@ export const config = {
     return intEnv("DATA_VOLUME_SIZE_GB", 20);
   },
   get snapshotRetention(): number {
-    return intEnv("SNAPSHOT_RETENTION", 7);
+    return intEnv("SNAPSHOT_RETENTION", 3);
+  },
+  /** AWS 側バックストップ: これを超えて稼働していたら watchdog tick が強制停止する */
+  get maxRuntimeHours(): number {
+    return intEnv("MAX_RUNTIME_HOURS", 12);
   },
 };
 

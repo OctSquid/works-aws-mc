@@ -28,7 +28,7 @@ export const TAG_DATA = { Key: "mc:data", Value: "true" } as const;
 export const STOP_REASON_TAG_KEY = "mc:stop-reason";
 export const DATA_DEVICE_NAME = "/dev/sdf";
 
-export type StopReason = "manual" | "auto-idle" | "spot";
+export type StopReason = "manual" | "auto-idle" | "spot" | "max-runtime";
 
 // ---------------------------------------------------------------------------
 // 起動候補（AZ × インスタンスタイプ）
@@ -285,6 +285,27 @@ export interface InstanceInfo {
   dataVolumeId?: string | undefined;
 }
 
+/**
+ * mc:role=server タグ付きで pending / running のインスタンスを探す。
+ * /start の二重起動ガード用: stale-takeover 後も前回のインスタンスが
+ * 生きているケースを RunInstances 前に検出する。
+ */
+export async function findRunningServerInstance(): Promise<
+  { instanceId: string; state: string } | undefined
+> {
+  const res = await ec2.send(
+    new DescribeInstancesCommand({
+      Filters: [
+        { Name: `tag:${TAG_ROLE.Key}`, Values: [TAG_ROLE.Value] },
+        { Name: "instance-state-name", Values: ["pending", "running"] },
+      ],
+    }),
+  );
+  const instance = res.Reservations?.flatMap((r) => r.Instances ?? [])[0];
+  if (!instance?.InstanceId) return undefined;
+  return { instanceId: instance.InstanceId, state: instance.State?.Name ?? "unknown" };
+}
+
 export async function describeInstance(instanceId: string): Promise<Instance | undefined> {
   try {
     const res = await ec2.send(new DescribeInstancesCommand({ InstanceIds: [instanceId] }));
@@ -464,6 +485,17 @@ export async function cleanupOldSnapshots(
     }
   }
   return deleted;
+}
+
+/** スナップショットの現在の状態（pending / completed / error）を返す */
+export async function getSnapshotState(snapshotId: string): Promise<string | undefined> {
+  try {
+    const res = await ec2.send(new DescribeSnapshotsCommand({ SnapshotIds: [snapshotId] }));
+    return res.Snapshots?.[0]?.State;
+  } catch (err) {
+    log("warn", "describe snapshot failed", { snapshotId, error: String(err) });
+    return undefined;
+  }
 }
 
 /** スナップショットが mc:data=true か確認する */

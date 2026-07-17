@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# サーバーの graceful shutdown。command-worker (SSM RunCommand) / idle-watchdog / spot-interruption から呼ばれる。
-# usage: mc-shutdown.sh <manual|auto-idle|spot> [--fast]
+# サーバーの graceful shutdown。command-worker (SSM RunCommand) / idle-watchdog / spot-interruption /
+# lifecycle (watchdog tick の max-runtime 強制停止) から呼ばれる。
+# usage: mc-shutdown.sh <manual|auto-idle|spot|max-runtime> [--fast]
 # 1. RCON でゲーム内告知 → 猶予 → save-all
 # 2. systemctl stop minecraft (ExecStop で RCON stop による graceful 終了)
 # 3. インスタンスに mc:stop-reason タグを付与 (lifecycle Lambda が Discord 通知の文言に使う)
@@ -8,7 +9,7 @@
 #    (spot 中断時は AWS 側が terminate するため poweroff しない)
 set -euo pipefail
 
-REASON="${1:?usage: mc-shutdown.sh <manual|auto-idle|spot> [--fast]}"
+REASON="${1:?usage: mc-shutdown.sh <manual|auto-idle|spot|max-runtime> [--fast]}"
 GRACE=60
 [ "${2:-}" = "--fast" ] && GRACE=10
 

@@ -4,9 +4,9 @@
 # タグ運用メモ（Lambda / インスタンス側との取り決め。Terraform 管理外）:
 #   - mc:role=server    : Launch Template の tag_specifications で付与。
 #                         IAM のタグ条件（SSM SendCommand 先の限定等）に使用
-#   - mc:stop-reason    : 停止理由（idle / manual / spot）。watchdog や
-#                         spot-interruption Lambda がインスタンスに付与し、
-#                         lifecycle Lambda が Discord 通知の文言分岐に使用
+#   - mc:stop-reason    : 停止理由（manual / auto-idle / spot / max-runtime）。
+#                         watchdog や spot-interruption Lambda がインスタンスに
+#                         付与し、lifecycle Lambda が Discord 通知の文言分岐に使用
 #   - mc:data=true      : データ用 EBS ボリューム。command-worker が起動後に
 #                         CreateTags で付与し（ルートボリュームへの誤付与を
 #                         避けるため TagSpecifications は使わない）、
@@ -61,6 +61,8 @@ module "control_plane" {
   purchasing            = local.purchasing
   data_volume_size_gb   = var.data_volume_size_gb
   snapshot_retention    = var.snapshot_retention
+  max_runtime_hours     = var.max_runtime_hours
+  alert_email           = var.budget_email
   ec2_instance_role_arn = module.server.instance_role_arn
   lambda_dist_dir       = local.lambda_dist_dir
 }

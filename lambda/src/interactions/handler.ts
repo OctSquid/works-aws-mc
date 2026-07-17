@@ -79,6 +79,15 @@ function headerLookup(
   return undefined;
 }
 
+/** 署名済みリクエストの再送（リプレイ）対策の許容時刻ずれ */
+const REPLAY_WINDOW_SECONDS = 300;
+
+function isTimestampFresh(timestamp: string, nowMs: number = Date.now()): boolean {
+  const seconds = Number(timestamp);
+  if (!Number.isFinite(seconds)) return false;
+  return Math.abs(nowMs / 1000 - seconds) <= REPLAY_WINDOW_SECONDS;
+}
+
 export const handler = async (event: FunctionUrlEvent): Promise<FunctionUrlResult> => {
   const rawBody = event.isBase64Encoded
     ? Buffer.from(event.body ?? "", "base64").toString("utf8")
@@ -98,11 +107,13 @@ export const handler = async (event: FunctionUrlEvent): Promise<FunctionUrlResul
   if (
     !signature ||
     !timestamp ||
+    !isTimestampFresh(timestamp) ||
     !verifyDiscordSignature(rawBody, signature, timestamp, publicKey)
   ) {
     log("warn", "invalid request signature", {
       hasSignature: Boolean(signature),
       hasTimestamp: Boolean(timestamp),
+      timestampFresh: timestamp ? isTimestampFresh(timestamp) : false,
     });
     return respond(401, { error: "invalid request signature" });
   }

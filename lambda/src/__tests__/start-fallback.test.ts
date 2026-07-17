@@ -104,21 +104,31 @@ describe("/start の候補フォールバック", () => {
         },
       ],
     });
-    ec2Mock.on(DescribeInstancesCommand).resolves({
-      Reservations: [
-        {
-          Instances: [
-            {
-              InstanceId: "i-ok",
-              State: { Name: "running" },
-              PublicIpAddress: "203.0.113.10",
-              LaunchTime: new Date(),
-              BlockDeviceMappings: [{ DeviceName: "/dev/sdf", Ebs: { VolumeId: "vol-new" } }],
+    // Filters 付き照会 = 二重起動ガード（既存インスタンス無し）、
+    // InstanceIds 付き照会 = waitForInstance（起動済みインスタンスを返す）
+    ec2Mock
+      .on(DescribeInstancesCommand)
+      .callsFake((input: { Filters?: unknown; InstanceIds?: string[] }) =>
+        input.Filters
+          ? { Reservations: [] }
+          : {
+              Reservations: [
+                {
+                  Instances: [
+                    {
+                      InstanceId: "i-ok",
+                      State: { Name: "running" },
+                      PublicIpAddress: "203.0.113.10",
+                      LaunchTime: new Date(),
+                      BlockDeviceMappings: [
+                        { DeviceName: "/dev/sdf", Ebs: { VolumeId: "vol-new" } },
+                      ],
+                    },
+                  ],
+                },
+              ],
             },
-          ],
-        },
-      ],
-    });
+      );
     route53Mock.on(ChangeResourceRecordSetsCommand).resolves({});
   });
 
@@ -298,14 +308,69 @@ describe("/start の候補フォールバック", () => {
     expect(runCalls[0]!.args[0].input.InstanceMarketOptions).toBeUndefined();
   });
 
+  it("既に mc:role=server インスタンスが稼働中なら二重起動を防いで中止する", async () => {
+    ec2Mock
+      .on(DescribeInstancesCommand)
+      .callsFake((input: { Filters?: unknown }) =>
+        input.Filters
+          ? {
+              Reservations: [
+                { Instances: [{ InstanceId: "i-alive", State: { Name: "running" } }] },
+              ],
+            }
+          : { Reservations: [] },
+      );
+
+    await handler(START_EVENT);
+
+    expect(ec2Mock.commandCalls(RunInstancesCommand)).toHaveLength(0);
+    // STARTING を獲得した後、STOPPED に戻す
+    const updates = ddbMock.commandCalls(UpdateCommand).map((c) => c.args[0].input);
+    expect(updates.some((u) => u.ExpressionAttributeValues?.[":to"] === "STOPPED")).toBe(true);
+    const bodies = fetchBodies();
+    expect(bodies.some((b) => b.includes("二重起動") && b.includes("i-alive"))).toBe(true);
+  });
+
+  it("起動後の DNS 登録失敗ではインスタンスを terminate せず IP 直結を案内する", async () => {
+    vi.useFakeTimers();
+    try {
+      ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-ok" }] });
+      route53Mock.on(ChangeResourceRecordSetsCommand).rejects(new Error("route53 outage"));
+
+      const promise = handler(START_EVENT);
+      await vi.runAllTimersAsync();
+      await promise;
+
+      // 稼働中の健全なインスタンスを一時障害で殺さない
+      expect(ec2Mock.commandCalls(TerminateInstancesCommand)).toHaveLength(0);
+      // リトライ 3 回
+      expect(route53Mock.commandCalls(ChangeResourceRecordSetsCommand)).toHaveLength(3);
+      // 状態はベストエフォートで RUNNING を記録する
+      const updates = ddbMock.commandCalls(UpdateCommand).map((c) => c.args[0].input);
+      const toRunning = updates.find((u) => u.ExpressionAttributeValues?.[":to"] === "RUNNING");
+      expect(toRunning?.ExpressionAttributeValues).toMatchObject({ ":set_instance_id": "i-ok" });
+      // 劣化モード通知（IP 直打ち）
+      const bodies = fetchBodies();
+      expect(bodies.some((b) => b.includes("203.0.113.10") && b.includes("後処理に失敗"))).toBe(
+        true,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("起動後の失敗（IP 取得不可）は terminate して STOPPED に戻す", async () => {
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-ok" }] });
-    // terminated として返す → waitForInstance が失敗する
-    ec2Mock.on(DescribeInstancesCommand).resolves({
-      Reservations: [
-        { Instances: [{ InstanceId: "i-ok", State: { Name: "terminated" as const } }] },
-      ],
-    });
+    // terminated として返す → waitForInstance が失敗する（ガードの Filters 照会は空のまま）
+    ec2Mock.on(DescribeInstancesCommand).callsFake((input: { Filters?: unknown }) =>
+      input.Filters
+        ? { Reservations: [] }
+        : {
+            Reservations: [
+              { Instances: [{ InstanceId: "i-ok", State: { Name: "terminated" as const } }] },
+            ],
+          },
+    );
 
     await handler(START_EVENT);
 

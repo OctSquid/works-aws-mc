@@ -12,9 +12,15 @@ const publicKeyHex = Buffer.from(keyPair.publicKey).toString("hex");
 const ssmMock = mockClient(SSMClient);
 const lambdaMock = mockClient(LambdaClient);
 
-function signedEvent(body: unknown, tamper = false): FunctionUrlEvent {
+function signedEvent(
+  body: unknown,
+  {
+    tamper = false,
+    timestampOffsetSec = 0,
+  }: { tamper?: boolean; timestampOffsetSec?: number } = {},
+): FunctionUrlEvent {
   const rawBody = JSON.stringify(body);
-  const timestamp = String(Math.floor(Date.now() / 1000));
+  const timestamp = String(Math.floor(Date.now() / 1000) + timestampOffsetSec);
   const signature = nacl.sign.detached(
     new TextEncoder().encode(timestamp + rawBody),
     keyPair.secretKey,
@@ -56,9 +62,21 @@ describe("interactions handler", () => {
   });
 
   it("不正な署名に 401 を返す", async () => {
-    const res = await handler(signedEvent({ type: 1 }, true));
+    const res = await handler(signedEvent({ type: 1 }, { tamper: true }));
     expect(res.statusCode).toBe(401);
     expect(lambdaMock.commandCalls(InvokeCommand)).toHaveLength(0);
+  });
+
+  it("タイムスタンプが古い署名済みリクエストは 401 を返す（リプレイ対策）", async () => {
+    // 署名自体は正しいが 10 分前 → 拒否
+    const res = await handler(signedEvent({ type: 1 }, { timestampOffsetSec: -600 }));
+    expect(res.statusCode).toBe(401);
+    expect(lambdaMock.commandCalls(InvokeCommand)).toHaveLength(0);
+  });
+
+  it("タイムスタンプの多少のずれ（5 分以内）は許容する", async () => {
+    const res = await handler(signedEvent({ type: 1 }, { timestampOffsetSec: -120 }));
+    expect(res.statusCode).toBe(200);
   });
 
   it("署名ヘッダが無ければ 401 を返す", async () => {

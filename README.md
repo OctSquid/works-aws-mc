@@ -240,5 +240,5 @@ npm run fmt:check # 整形差分の検査のみ（CI と同じ）
 ## コスト管理
 
 - AWS Budgets（月 $15、Terraform 変数で変更可）で 80%/100% 時にメール通知
-- 主なコスト: スポット稼働時間（≈$0.06/h）、EBS スナップショット 7 世代、AMI 2 世代、Route53 zone $0.5/月
+- 主なコスト: スポット稼働時間（≈$0.06/h）、EBS スナップショット 3 世代、AMI 2 世代、Route53 zone $0.5/月
 - NAT Gateway / Elastic IP / ALB は使わない（これが低コストの前提。追加しないこと）

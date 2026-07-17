@@ -32,6 +32,24 @@ resource "aws_iam_role_policy_attachment" "lambda_logs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+# 非同期 Invoke の on_failure destination（alerting.tf）への発行権限。
+# destination への送信は各関数の実行ロールで行われる
+data "aws_iam_policy_document" "publish_ops_alerts" {
+  statement {
+    sid       = "PublishOpsAlerts"
+    actions   = ["sns:Publish"]
+    resources = [aws_sns_topic.ops_alerts.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "publish_ops_alerts" {
+  for_each = toset(["command-worker", "lifecycle", "spot-interruption"])
+
+  name   = "mc-${each.key}-ops-alerts"
+  role   = aws_iam_role.lambda[each.key].id
+  policy = data.aws_iam_policy_document.publish_ops_alerts.json
+}
+
 # ----------------------------------------------------------------------------
 # mc-interactions: 署名検証と worker の async Invoke のみ
 # ----------------------------------------------------------------------------
@@ -73,16 +91,49 @@ data "aws_iam_policy_document" "command_worker" {
     resources = ["*"]
   }
 
-  # RunInstances は AMI/サブネット/SG/ボリューム等の多数のリソースに
-  # またがるため "*"。起動時のタグ付け（TagSpecifications）も CreateTags
-  # が必要
+  # RunInstances: インスタンス ARN には ec2:InstanceType 条件を付け、
+  # server.json 由来の設定タイプ以外を起動できないようにする
+  # （ロール漏洩時に高額インスタンスを起動されるリスクの遮断）
   statement {
-    sid = "Ec2Launch"
-    actions = [
-      "ec2:RunInstances",
-      "ec2:CreateTags",
+    sid       = "Ec2RunInstancesTypeRestricted"
+    actions   = ["ec2:RunInstances"]
+    resources = ["arn:aws:ec2:${var.region}:${local.account_id}:instance/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:InstanceType"
+      values   = var.instance_types
+    }
+  }
+
+  # RunInstances が同時に触る付随リソース（AMI / サブネット / SG / ボリューム /
+  # ENI / Launch Template / スポットリクエスト）。これらに InstanceType 条件は
+  # 適用できないためリソース種別で限定する
+  statement {
+    sid     = "Ec2RunInstancesResources"
+    actions = ["ec2:RunInstances"]
+    resources = [
+      "arn:aws:ec2:${var.region}:${local.account_id}:volume/*",
+      "arn:aws:ec2:${var.region}:${local.account_id}:network-interface/*",
+      "arn:aws:ec2:${var.region}:${local.account_id}:subnet/*",
+      "arn:aws:ec2:${var.region}:${local.account_id}:security-group/*",
+      "arn:aws:ec2:${var.region}:${local.account_id}:launch-template/*",
+      "arn:aws:ec2:${var.region}:${local.account_id}:spot-instances-request/*",
+      "arn:aws:ec2:${var.region}::image/*",
+      "arn:aws:ec2:${var.region}::snapshot/*",
     ]
-    resources = ["*"]
+  }
+
+  # タグ付け対象はインスタンス（LT の TagSpecifications / mc:stop-reason）と
+  # データボリューム（mc:data）のみ
+  statement {
+    sid     = "Ec2CreateTags"
+    actions = ["ec2:CreateTags"]
+    resources = [
+      "arn:aws:ec2:${var.region}:${local.account_id}:instance/*",
+      "arn:aws:ec2:${var.region}:${local.account_id}:volume/*",
+      "arn:aws:ec2:${var.region}:${local.account_id}:spot-instances-request/*",
+    ]
   }
 
   # terminate は mc:role=server タグ付きインスタンスに限定
@@ -206,19 +257,109 @@ data "aws_iam_policy_document" "lifecycle" {
     resources = ["*"]
   }
 
-  # CreateSnapshot はボリュームとスナップショット双方の ARN が対象。
-  # 削除対象は mc:data=true タグ付きに絞れるが、タグ付け漏れで
-  # ボリューム課金が残り続ける事故の方が高くつくため "*" とし、
-  # 対象特定は Lambda 側ロジック（mc:data タグでのフィルタ）に委ねる
+  # CreateSnapshot: 対象ボリュームは mc:data=true 付きのみ、生成される
+  # スナップショットには mc:data=true タグの付与を必須にする
   statement {
-    sid = "SnapshotLifecycle"
+    sid       = "SnapshotCreateFromDataVolume"
+    actions   = ["ec2:CreateSnapshot"]
+    resources = ["arn:aws:ec2:${var.region}:${local.account_id}:volume/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:ResourceTag/mc:data"
+      values   = ["true"]
+    }
+  }
+
+  statement {
+    sid       = "SnapshotCreateTagged"
+    actions   = ["ec2:CreateSnapshot"]
+    resources = ["arn:aws:ec2:${var.region}::snapshot/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/mc:data"
+      values   = ["true"]
+    }
+  }
+
+  # CreateSnapshot の TagSpecifications 用（作成時のみタグ付け可）
+  statement {
+    sid       = "TagOnSnapshotCreate"
+    actions   = ["ec2:CreateTags"]
+    resources = ["arn:aws:ec2:${var.region}::snapshot/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:CreateAction"
+      values   = ["CreateSnapshot"]
+    }
+  }
+
+  # 削除は mc:data=true タグ付きリソースに限定する。タグ付け漏れの
+  # ボリュームは削除に失敗して残るが、失敗は on_failure destination /
+  # エラーアラーム（alerting.tf）で通知されるため、無差別削除権限より安全
+  statement {
+    sid = "DeleteDataVolumeAndSnapshots"
     actions = [
-      "ec2:CreateSnapshot",
       "ec2:DeleteVolume",
       "ec2:DeleteSnapshot",
-      "ec2:CreateTags",
     ]
-    resources = ["*"]
+    resources = [
+      "arn:aws:ec2:${var.region}:${local.account_id}:volume/*",
+      "arn:aws:ec2:${var.region}::snapshot/*",
+    ]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:ResourceTag/mc:data"
+      values   = ["true"]
+    }
+  }
+
+  # watchdog tick の強制停止経路: mc:stop-reason タグ付与と terminate
+  # （いずれも mc:role=server タグ付きインスタンス限定）
+  statement {
+    sid       = "TagStopReason"
+    actions   = ["ec2:CreateTags"]
+    resources = ["arn:aws:ec2:${var.region}:${local.account_id}:instance/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:ResourceTag/mc:role"
+      values   = ["server"]
+    }
+  }
+
+  statement {
+    sid       = "Ec2Terminate"
+    actions   = ["ec2:TerminateInstances"]
+    resources = ["arn:aws:ec2:${var.region}:${local.account_id}:instance/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:ResourceTag/mc:role"
+      values   = ["server"]
+    }
+  }
+
+  # watchdog tick の graceful shutdown（mc-shutdown.sh max-runtime）
+  statement {
+    sid       = "SsmSendCommandDocument"
+    actions   = ["ssm:SendCommand"]
+    resources = ["arn:aws:ssm:${var.region}::document/AWS-RunShellScript"]
+  }
+
+  statement {
+    sid       = "SsmSendCommandInstances"
+    actions   = ["ssm:SendCommand"]
+    resources = ["arn:aws:ec2:${var.region}:${local.account_id}:instance/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ssm:resourceTag/mc:role"
+      values   = ["server"]
+    }
   }
 
   # terminate 後の A レコード削除

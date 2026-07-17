@@ -1,4 +1,4 @@
-import { config, errorMessage, log, type Purchasing } from "../shared/config";
+import { config, errorMessage, log, sleep, type Purchasing } from "../shared/config";
 import { editOriginalResponse, sendFollowup } from "../shared/discord";
 import {
   attachDataVolume,
@@ -7,6 +7,7 @@ import {
   fetchSpotCandidates,
   findLatestDataSnapshot,
   findOrphanDataVolume,
+  findRunningServerInstance,
   getCurrentSpotPrice,
   getSubnetsByAz,
   isRetryableCapacityError,
@@ -100,6 +101,23 @@ async function notifyBestEffort(label: string, fn: () => Promise<void>): Promise
   }
 }
 
+const POST_LAUNCH_RETRY_DELAY_MS = 2_000;
+
+/** 一時障害向けの単純リトライ。全滅したら最後のエラーを throw する */
+async function withRetries<T>(fn: () => Promise<T>, label: string, attempts = 3): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      log("warn", "retryable step failed", { label, attempt, error: errorMessage(err) });
+      if (attempt < attempts) await sleep(POST_LAUNCH_RETRY_DELAY_MS);
+    }
+  }
+  throw lastErr;
+}
+
 // ---------------------------------------------------------------------------
 // /start
 // ---------------------------------------------------------------------------
@@ -163,6 +181,22 @@ async function handleStart(ctx: InteractionContext): Promise<void> {
 
   let instanceId: string | undefined;
   try {
+    // stale-takeover 等で前回のインスタンスがまだ生きている場合の二重起動ガード。
+    // 状態機械（DynamoDB）は文字列しか見ていないため、EC2 側の実態を確認する。
+    const existing = await findRunningServerInstance();
+    if (existing) {
+      log("warn", "running server instance found before launch, aborting", { ...existing });
+      await transitionState({ from: "STARTING", to: "STOPPED" }).catch((err) =>
+        log("error", "state revert failed", { error: errorMessage(err) }),
+      );
+      await editOriginalResponse(
+        ctx.applicationId,
+        ctx.token,
+        `⚠️ 既に稼働中/起動中のインスタンス (\`${existing.instanceId}\`) が見つかったため、二重起動を防ぐため起動を中止しました。\`/status\` で状態を確認してください。`,
+      );
+      return;
+    }
+
     const [orphan, snapshot, subnetsByAz] = await Promise.all([
       findOrphanDataVolume(),
       findLatestDataSnapshot(),
@@ -252,31 +286,66 @@ async function handleStart(ctx: InteractionContext): Promise<void> {
     if (!info.publicIp) {
       throw new Error("パブリック IP を取得できませんでした");
     }
+    const publicIp = info.publicIp;
 
-    await upsertARecord(config.hostedZoneId, config.serverFqdn, info.publicIp);
-
-    await transitionState({
-      from: "STARTING",
-      to: "RUNNING",
-      set: {
-        instance_id: instanceId,
-        az: chosen.az,
-        instance_type: chosen.instanceType,
-        purchasing: usedMarket,
-        ...(usedMarket === "spot" && chosen.price !== undefined
-          ? { spot_price: chosen.price }
-          : {}),
-        ...(volumeId ? { volume_id: volumeId } : {}),
-      },
-      clear: ["snapshot_id"],
-    });
-
+    // --- ここから先はインスタンスもデータボリュームも健全 ---
+    // DNS 登録や状態記録の一時障害で稼働中のサーバーを terminate しないよう、
+    // リトライした上で、それでも失敗したら IP 直結の劣化モードで案内する。
+    const runningSet = {
+      instance_id: instanceId,
+      az: chosen.az,
+      instance_type: chosen.instanceType,
+      purchasing: usedMarket,
+      ...(usedMarket === "spot" && chosen.price !== undefined ? { spot_price: chosen.price } : {}),
+      ...(volumeId ? { volume_id: volumeId } : {}),
+    };
+    const transitionToRunning = async (): Promise<void> => {
+      const result = await transitionState({
+        from: "STARTING",
+        to: "RUNNING",
+        set: runningSet,
+        clear: ["snapshot_id"],
+      });
+      if (!result.ok) {
+        log("warn", "transition to RUNNING rejected", { currentState: result.currentState });
+      }
+    };
     const priceLabel =
       usedMarket === "ondemand"
         ? purchasing === "spot-then-ondemand"
           ? "オンデマンド（スポットからフォールバック）"
           : "オンデマンド"
         : `$${chosen.price?.toFixed(4) ?? "?"}/時（スポット）`;
+
+    try {
+      await withRetries(
+        () => upsertARecord(config.hostedZoneId, config.serverFqdn, publicIp),
+        "route53-upsert",
+      );
+      await withRetries(transitionToRunning, "transition-to-running");
+    } catch (postErr) {
+      log("error", "post-launch finalization failed", {
+        instanceId,
+        error: errorMessage(postErr),
+      });
+      // DNS 失敗後でも状態記録は試みる（片方の失敗でもう片方を巻き添えにしない）
+      await transitionToRunning().catch((err) =>
+        log("error", "best-effort transition to RUNNING failed", { error: errorMessage(err) }),
+      );
+      await notifyBestEffort("start-degraded", () =>
+        sendFollowup(
+          ctx.applicationId,
+          ctx.token,
+          [
+            `⚠️ サーバーは起動しましたが、後処理に失敗しました: ${errorMessage(postErr)}`,
+            `IP 直打ちで接続できます: \`${publicIp}\``,
+            "DNS や状態表示が復旧しない場合は `/status` で確認してください（アイドル自動停止は機能します）。",
+          ].join("\n"),
+        ),
+      );
+      return;
+    }
+
     // 起動は既に成功している。通知失敗で catch に落ちるとインスタンスを
     // 巻き戻し（terminate）してしまうため、ここはベストエフォートにする。
     await notifyBestEffort("start-success", () =>
@@ -284,7 +353,7 @@ async function handleStart(ctx: InteractionContext): Promise<void> {
         ctx.applicationId,
         ctx.token,
         [
-          `🚀 サーバー起動中: \`${config.serverFqdn}\` (${info.publicIp})`,
+          `🚀 サーバー起動中: \`${config.serverFqdn}\` (${publicIp})`,
           `AZ: ${chosen.az} / タイプ: ${chosen.instanceType} / 単価: ${priceLabel}`,
           "ワールドの読込が完了したら改めて通知されます。",
         ].join("\n"),

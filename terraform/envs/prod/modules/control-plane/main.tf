@@ -48,7 +48,9 @@ locals {
     "lifecycle" = {
       name    = "mc-lifecycle"
       timeout = 600
-      env     = local.common_env
+      env = merge(local.common_env, {
+        MAX_RUNTIME_HOURS = tostring(var.max_runtime_hours)
+      })
     }
     "spot-interruption" = {
       name    = "mc-spot-interruption"
@@ -205,6 +207,29 @@ resource "aws_lambda_permission" "snapshot_completed" {
   function_name = aws_lambda_function.this["lifecycle"].function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.snapshot_completed.arn
+}
+
+# 4. 定期 watchdog tick → mc-lifecycle（暴走稼働の強制停止・スタック状態の回復）。
+#    インスタンス上の idle-watchdog が唯一の自動停止だと、その watchdog 自体の
+#    故障で課金が止まらなくなるため、AWS 側からの最終防衛線として動かす
+resource "aws_cloudwatch_event_rule" "watchdog_tick" {
+  name                = "mc-watchdog-tick"
+  description         = "Periodic watchdog tick -> mc-lifecycle (max-runtime backstop / stalled-state recovery)"
+  schedule_expression = "rate(30 minutes)"
+}
+
+resource "aws_cloudwatch_event_target" "watchdog_tick" {
+  rule  = aws_cloudwatch_event_rule.watchdog_tick.name
+  arn   = aws_lambda_function.this["lifecycle"].arn
+  input = jsonencode({ "detail-type" = "MC Watchdog Tick" })
+}
+
+resource "aws_lambda_permission" "watchdog_tick" {
+  statement_id  = "AllowEventBridgeWatchdogTick"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.this["lifecycle"].function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.watchdog_tick.arn
 }
 
 # ----------------------------------------------------------------------------
