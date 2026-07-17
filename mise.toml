@@ -1,4 +1,8 @@
+# ツールチェーンの固定と、開発・運用タスクの単一エントリポイント。
+# 使い方: mise run <task>（例: mise run docker:up）。一覧は mise tasks
 [env]
+# .env（gitignore 済み）を全タスクに注入する。項目は .env.example を参照
+_.file = ".env"
 AWS_PROFILE = "mc"
 
 [tools]
@@ -6,3 +10,87 @@ aws-cli = { version = "latest", symlink_bins = "true" }
 terraform = "1.12"
 packer = "1.12"
 node = "24"
+
+# ---------------------------------------------------------------------------
+# 開発
+# ---------------------------------------------------------------------------
+
+[tasks.install]
+description = "全ワークスペースの依存をインストール"
+run = "npm ci"
+
+[tasks.lint]
+description = "Lint + フォーマット検査"
+run = ["npm run lint", "npm run fmt:check"]
+
+[tasks.fmt]
+description = "コードフォーマット"
+run = "npm run fmt"
+
+[tasks.typecheck]
+description = "全ワークスペースの型チェック"
+run = "npm run typecheck"
+
+[tasks.test]
+description = "テスト実行（lambda / tools）"
+run = "npm test"
+
+[tasks.build]
+description = "Lambda のビルド（terraform apply の前に必要）"
+run = "npm run build"
+
+# ---------------------------------------------------------------------------
+# ローカル検証（Docker）
+# ---------------------------------------------------------------------------
+
+[tasks.download]
+description = "Paper 本体とプラグイン jar を artifacts/ にダウンロード"
+run = "npm run download -w download-artifacts"
+
+[tasks."docker:up"]
+description = "ローカル検証サーバーを起動（jar ダウンロード込み）"
+depends = ["download"]
+run = 'RCON_CLI_VERSION=$(jq -r .tooling.rcon_cli_version server.json) docker compose -f docker/compose.yml up --build'
+
+[tasks."docker:down"]
+description = "ローカル検証サーバーを停止"
+run = "docker compose -f docker/compose.yml down"
+
+[tasks."docker:rcon"]
+description = "ローカル検証サーバーへ RCON コマンドを送る（例: mise run docker:rcon list）"
+run = "docker compose -f docker/compose.yml exec minecraft /opt/minecraft/bin/rcon.sh"
+
+# ---------------------------------------------------------------------------
+# インフラ
+# ---------------------------------------------------------------------------
+
+[tasks."tf:plan"]
+description = "Terraform plan（prod）"
+dir = "terraform/envs/prod"
+run = "terraform plan"
+
+[tasks."tf:apply"]
+description = "Terraform apply（prod）。Lambda は事前に mise run build"
+dir = "terraform/envs/prod"
+run = "terraform apply"
+
+[tasks."packer:validate"]
+description = "Packer テンプレートの検証"
+dir = "packer"
+run = ["packer init .", "packer validate ."]
+
+[tasks.register]
+description = "Discord Slash Commands を登録（.env の DISCORD_* を使用）"
+run = "npm run register -w register-commands"
+
+# ---------------------------------------------------------------------------
+# セットアップ・診断
+# ---------------------------------------------------------------------------
+
+[tasks."setup:secrets"]
+description = ".env の値を SSM Parameter Store に投入（rcon-password は自動生成）"
+run = "scripts/setup-secrets.sh"
+
+[tasks.doctor]
+description = "セットアップ状態の読み取り専用診断（ツール・AWS・SSM・デプロイ）"
+run = "scripts/doctor.sh"

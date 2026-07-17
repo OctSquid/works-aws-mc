@@ -1,5 +1,5 @@
 # compose の context がリポジトリルートのため、ビルドに不要なものを除外する
-# （必要なのは artifacts/ と server-config/、docker/entrypoint.sh のみ）
+# （必要なのは artifacts/ と server/、docker/entrypoint.sh のみ）
 .git
 node_modules
 **/node_modules

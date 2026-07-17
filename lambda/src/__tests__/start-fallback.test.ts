@@ -309,17 +309,13 @@ describe("/start の候補フォールバック", () => {
   });
 
   it("既に mc:role=server インスタンスが稼働中なら二重起動を防いで中止する", async () => {
-    ec2Mock
-      .on(DescribeInstancesCommand)
-      .callsFake((input: { Filters?: unknown }) =>
-        input.Filters
-          ? {
-              Reservations: [
-                { Instances: [{ InstanceId: "i-alive", State: { Name: "running" } }] },
-              ],
-            }
-          : { Reservations: [] },
-      );
+    ec2Mock.on(DescribeInstancesCommand).callsFake((input: { Filters?: unknown }) =>
+      input.Filters
+        ? {
+            Reservations: [{ Instances: [{ InstanceId: "i-alive", State: { Name: "running" } }] }],
+          }
+        : { Reservations: [] },
+    );
 
     await handler(START_EVENT);
 

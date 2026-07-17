@@ -6,6 +6,10 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        # server.json の tooling.rcon_cli_version が単一ソース。
+        # mise run docker:up が jq で抽出して環境変数に渡す
+        RCON_CLI_VERSION: ${RCON_CLI_VERSION:-1.6.11}
     ports:
       - "25565:25565/tcp" # Java 版
       - "19132:19132/udp" # Bedrock 版 (Geyser)

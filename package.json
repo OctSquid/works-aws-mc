@@ -1,18 +1,30 @@
 {
   "name": "aws-mc-server",
   "private": true,
-  "description": "リポジトリ共通の Lint / Format ツール (oxlint, oxfmt)",
+  "description": "リポジトリ共通のツールチェーン（npm workspaces / oxlint / oxfmt / TypeScript）",
+  "workspaces": [
+    "lambda",
+    "tools/download-artifacts",
+    "tools/register-commands"
+  ],
   "scripts": {
     "lint": "oxlint",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
     "prepare": "husky"
   },
   "devDependencies": {
+    "@types/node": "^24.0.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.8",
     "oxfmt": "^0.58.0",
-    "oxlint": "^1.73.0"
+    "oxlint": "^1.73.0",
+    "tsx": "^4.23.0",
+    "typescript": "^7.0.0",
+    "vitest": "^4.0.0"
   },
   "lint-staged": {
     "*.{js,mjs,cjs,ts,mts,cts}": [

@@ -1,30 +1,4 @@
 {
-  "compilerOptions": {
-    "target": "ES2024",
-    "lib": ["ES2024"],
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "moduleDetection": "force",
-
-    // 型チェック（strict + 追加の厳格化）
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "noImplicitOverride": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-
-    // tsx（esbuild）が単体で安全に処理できる構文に限定する
-    "verbatimModuleSyntax": true,
-    "erasableSyntaxOnly": true,
-    "isolatedModules": true,
-
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
-    "noEmit": true,
-    "types": ["node"]
-  },
+  "extends": "../../tsconfig.base.json",
   "include": ["src"]
 }

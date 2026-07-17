@@ -12,17 +12,14 @@ variable "region" {
   default = "ap-northeast-1"
 }
 
-variable "rcon_cli_version" {
-  type    = string
-  default = "1.6.11"
-}
-
 locals {
   timestamp = regex_replace(timestamp(), "[- TZ:]", "")
 
-  # server.json が AMI アーキテクチャの単一の真実の源（Terraform 側も同じファイルを読む）
-  server_spec  = jsondecode(file("${path.root}/../server.json"))
-  architecture = local.server_spec.ec2.architecture
+  # server.json が AMI アーキテクチャと rcon-cli バージョンの単一の真実の源
+  # （Terraform / Docker も同じファイルを読む）
+  server_spec      = jsondecode(file("${path.root}/../server.json"))
+  architecture     = local.server_spec.ec2.architecture
+  rcon_cli_version = local.server_spec.tooling.rcon_cli_version
 
   # ビルドは本番と同一 arch の安価なスポットインスタンスで行う
   build_instance_types = {
@@ -73,19 +70,20 @@ source "amazon-ebs" "minecraft" {
 build {
   sources = ["source.amazon-ebs.minecraft"]
 
-  # 事前に tools/download-artifacts で生成した artifacts/ と server-config/ をアップロード
+  # 事前に tools/download-artifacts で生成した artifacts/（リポジトリルート。
+  # Docker と共通）と server/ をアップロード
   provisioner "file" {
-    source      = "${path.root}/provision/artifacts"
+    source      = "${path.root}/../artifacts"
     destination = "/tmp/artifacts"
   }
 
   provisioner "file" {
-    source      = "${path.root}/../server-config"
-    destination = "/tmp/server-config"
+    source      = "${path.root}/../server"
+    destination = "/tmp/server"
   }
 
   provisioner "shell" {
-    environment_vars = ["RCON_CLI_VERSION=${var.rcon_cli_version}"]
+    environment_vars = ["RCON_CLI_VERSION=${local.rcon_cli_version}"]
     script           = "${path.root}/provision/install.sh"
     execute_command  = "sudo -E bash '{{ .Path }}'"
   }

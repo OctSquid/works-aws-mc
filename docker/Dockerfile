@@ -1,4 +1,4 @@
-# ローカルテスト環境。Packer (AMI) と同じ build-dist.sh / sync-dist.sh / server-config を通すことで
+# ローカルテスト環境。Packer (AMI) と同じ build-dist.sh / sync-dist.sh / server を通すことで
 # 本番と同一のプロビジョニングを検証する。
 # OS は Alpine (musl) のため AL2023 の完全再現ではないが、共有スクリプト
 # (build-dist / sync-dist / render-config / mc-start) と Paper / Java 25 の検証は維持される。
@@ -21,12 +21,12 @@ RUN mkdir -p /opt/minecraft/bin \
   | tar -xz -C /tmp \
   && install -m 755 /tmp/rcon-cli /opt/minecraft/bin/rcon-cli
 
-COPY server-config/scripts/ /opt/minecraft/bin/
+COPY server/scripts/ /opt/minecraft/bin/
 RUN chmod +x /opt/minecraft/bin/*.sh
 
 COPY artifacts/ /tmp/artifacts/
-COPY server-config/ /tmp/server-config/
-RUN /opt/minecraft/bin/build-dist.sh /tmp/artifacts /tmp/server-config /opt/minecraft-dist
+COPY server/ /tmp/server/
+RUN /opt/minecraft/bin/build-dist.sh /tmp/artifacts /tmp/server /opt/minecraft-dist
 
 # ステージ 2: ランタイム
 # Minecraft 26.1+ は Java 25 以上が必要

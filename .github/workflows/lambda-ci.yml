@@ -2,13 +2,19 @@ name: lambda-ci
 
 on:
   pull_request:
-    paths: ["lambda/**", "tools/**", ".github/workflows/lambda-ci.yml"]
+    paths:
+      - "lambda/**"
+      - "tools/**"
+      - package.json
+      - package-lock.json
+      - tsconfig.base.json
+      - .github/workflows/lambda-ci.yml
 
 permissions:
   contents: read
 
 jobs:
-  lambda:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -16,29 +22,10 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: lambda/package-lock.json
-      - name: Test lambda
-        working-directory: lambda
+          cache-dependency-path: package-lock.json
+      - name: Typecheck / build / test (all workspaces)
         run: |
           npm ci
           npm run typecheck
           npm run build
           npm test
-
-  tools:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        tool: [download-artifacts, register-commands]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: tools/${{ matrix.tool }}/package-lock.json
-      - name: Typecheck ${{ matrix.tool }}
-        working-directory: tools/${{ matrix.tool }}
-        run: |
-          npm ci
-          npm run typecheck

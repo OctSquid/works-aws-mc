@@ -22,7 +22,7 @@ Discord の Slash Command で必要な時だけスポットインスタンスを
 [Route53] 起動時に A レコード UPSERT (Elastic IP 不使用)
 ```
 
-各コンポーネントの詳細設計は `plan.md` を参照。
+各コンポーネントの詳細設計は `docs/design.md` を参照。
 
 ## リポジトリ構成
 
@@ -30,7 +30,7 @@ Discord の Slash Command で必要な時だけスポットインスタンスを
 | --------------------------- | ---------------------------------------------------------------------- |
 | `server.json`               | Minecraft/Paper バージョン、JVM ヒープ、EC2 の arch・タイプ・購入方式  |
 | `plugins.json`              | プラグイン定義（追加はここに 1 エントリ書くだけ）                      |
-| `server-config/`            | サーバー・プラグイン設定、インスタンス上のスクリプト、systemd ユニット |
+| `server/`                   | サーバー・プラグイン設定、インスタンス上のスクリプト、systemd ユニット |
 | `tools/download-artifacts/` | server.json/plugins.json を解釈して Paper + プラグインを DL            |
 | `tools/register-commands/`  | Discord Slash Commands 登録                                            |
 | `packer/`                   | AMI ビルド定義                                                         |
@@ -109,7 +109,7 @@ aws ssm put-parameter --overwrite --name /mc/rcon-password --type SecureString -
 | プラグイン追加・更新   | `plugins.json` を編集して PR → main マージで AMI 自動再ビルド → 次回 `/start` から反映               |
 | MC バージョンアップ    | `server.json` の `minecraft_version` を更新（同上）                                                  |
 | インスタンスタイプ変更 | `server.json` の `ec2` を編集（arch 変更時は AMI 再ビルド + terraform apply の両方が自動で走る）     |
-| サーバー設定変更       | `server-config/` を編集（同上）                                                                      |
+| サーバー設定変更       | `server/` を編集（同上）                                                                             |
 | 管理コマンド実行       | SSM Session Manager で接続し `sudo /opt/minecraft/bin/rcon.sh <command>`（SSH ポートは開いていない） |
 
 ### サーバーコンソールへのアクセス
@@ -157,7 +157,7 @@ aws ssm send-command --instance-ids "$INSTANCE_ID" \
 
 ### プラグインの追加方法
 
-`plugins.json` の `plugins` 配列に 1 エントリ追加する。対応ソース: `hangar`（PaperMC 公式・推奨）/ `modrinth` / `github` / `geysermc` / `curseforge`（要 API キー）/ `url` / `local`（手動入手 jar を `server-config/plugins-local/` に置く）。
+`plugins.json` の `plugins` 配列に 1 エントリ追加する。対応ソース: `hangar`（PaperMC 公式・推奨）/ `modrinth` / `github` / `geysermc` / `curseforge`（要 API キー）/ `url` / `local`（手動入手 jar を `server/plugins-local/` に置く）。
 
 ```jsonc
 {
@@ -176,8 +176,8 @@ aws ssm send-command --instance-ids "$INSTANCE_ID" \
 
 起動時に AMI 内の配布物をデータボリュームへ rsync する（`sync-dist.sh`）:
 
-- **Git が正（常に上書き）**: Paper 本体、プラグイン jar（dist に無い古い jar は削除）、`server-config/` 管理の設定ファイル
-- **サーバーが正（常に保持）**: `world*/`、`usercache.json`、ban/ops/whitelist、`plugins.json` の `preserve` パターン、`server-config/sync-preserve.txt` のパターン
+- **Git が正（常に上書き）**: Paper 本体、プラグイン jar（dist に無い古い jar は削除）、`server/` 管理の設定ファイル
+- **サーバーが正（常に保持）**: `world*/`、`usercache.json`、ban/ops/whitelist、`plugins.json` の `preserve` パターン、`server/sync-preserve.txt` のパターン
 - dist に存在しないファイル（プラグイン生成データ等）はそもそも触らない（`--delete` 不使用）
 
 ## ローカルテスト

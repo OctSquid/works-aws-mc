@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# artifacts/ (download-artifacts の出力) + server-config/ から配布物ツリーを組み立てる。
+# artifacts/ (download-artifacts の出力) + server/ から配布物ツリーを組み立てる。
 # Packer の AMI ビルドと Docker イメージビルドの両方から呼ばれる（単一ソース）。
-# usage: build-dist.sh <artifacts-dir> <server-config-dir> <dest-dir>
+# usage: build-dist.sh <artifacts-dir> <server-dir> <dest-dir>
 set -euo pipefail
 
 ARTIFACTS="$1"

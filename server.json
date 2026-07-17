@@ -8,5 +8,8 @@
     "architecture": "arm64",
     "instance_types": ["m6g.large", "m7g.large"],
     "purchasing": "spot"
+  },
+  "tooling": {
+    "rcon_cli_version": "1.6.11"
   }
 }

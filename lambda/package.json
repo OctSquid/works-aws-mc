@@ -19,11 +19,8 @@
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
     "aws-sdk-client-mock": "^4.1.0",
-    "esbuild": "^0.28.0",
-    "typescript": "^7.0.0",
-    "vitest": "^4.0.0"
+    "esbuild": "^0.28.0"
   },
   "engines": {
     "node": ">=24"

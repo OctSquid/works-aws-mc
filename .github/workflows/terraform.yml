@@ -27,14 +27,13 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: lambda/package-lock.json
+          cache-dependency-path: package-lock.json
 
       # Lambda は terraform apply が archive_file で zip 化するため、apply 前にビルドしておく
       - name: Build lambda
-        working-directory: lambda
         run: |
           npm ci
-          npm run build
+          npm run build -w mc-lambda
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6

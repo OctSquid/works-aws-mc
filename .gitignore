@@ -14,8 +14,6 @@ plan.txt
 terraform/bootstrap/terraform.tfstate*
 
 # Packer
-packer/provision/artifacts/*
-!packer/provision/artifacts/.gitkeep
 *.pkrvars.hcl
 packer_cache/
 

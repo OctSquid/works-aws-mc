@@ -16,7 +16,7 @@ useradd -r -m -d /var/lib/minecraft -s /sbin/nologin minecraft
 
 # スクリプト群
 mkdir -p /opt/minecraft/bin
-cp /tmp/server-config/scripts/*.sh /opt/minecraft/bin/
+cp /tmp/server/scripts/*.sh /opt/minecraft/bin/
 chmod +x /opt/minecraft/bin/*.sh
 
 # rcon-cli (itzg) — arch はビルドインスタンス自身から導出（AMI と常に一致する）
@@ -33,10 +33,10 @@ curl -sfL "https://github.com/itzg/rcon-cli/releases/download/${RCON_CLI_VERSION
 install -m 755 /tmp/rcon-cli /opt/minecraft/bin/rcon-cli
 
 # 配布物ツリーの組み立て (Docker と同一スクリプト)
-/opt/minecraft/bin/build-dist.sh /tmp/artifacts /tmp/server-config /opt/minecraft-dist
+/opt/minecraft/bin/build-dist.sh /tmp/artifacts /tmp/server /opt/minecraft-dist
 
 # systemd ユニット
-cp /tmp/server-config/systemd/*.service /tmp/server-config/systemd/*.timer /etc/systemd/system/
+cp /tmp/server/systemd/*.service /tmp/server/systemd/*.timer /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable mc-bootstrap.service minecraft.service mc-up-notify.service mc-idle-watchdog.timer
 
@@ -44,6 +44,6 @@ systemctl enable mc-bootstrap.service minecraft.service mc-up-notify.service mc-
 mkdir -p /srv/minecraft
 
 # 後片付け
-rm -rf /tmp/artifacts /tmp/server-config /tmp/rcon-cli
+rm -rf /tmp/artifacts /tmp/server /tmp/rcon-cli
 
 echo "AMI provisioning complete"

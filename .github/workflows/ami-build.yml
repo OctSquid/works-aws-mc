@@ -6,7 +6,7 @@ on:
     paths:
       - server.json
       - plugins.json
-      - "server-config/**"
+      - "server/**"
       - "packer/**"
       - "tools/download-artifacts/**"
       - .github/workflows/ami-build.yml
@@ -30,16 +30,15 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: tools/download-artifacts/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Download Paper + plugins
-        working-directory: tools/download-artifacts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
         run: |
           npm ci
-          npm run download -- --out ../../packer/provision/artifacts
+          npm run download -w download-artifacts
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
