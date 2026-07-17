@@ -7,6 +7,11 @@ export interface ServerSpec {
     architecture: "arm64" | "x86_64";
     /** スポット起動候補（優先順）。architecture と整合していること */
     instance_types: string[];
+    /**
+     * 購入方式。省略時は "spot"。
+     * "spot-then-ondemand" はスポット確保失敗時にオンデマンドへ自動フォールバックする
+     */
+    purchasing?: "spot" | "ondemand" | "spot-then-ondemand";
   };
 }
 

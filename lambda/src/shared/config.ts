@@ -27,6 +27,10 @@ function intEnv(name: string, defaultValue: number): number {
 
 export const DEFAULT_INSTANCE_TYPES = "m6g.large,m7g.large";
 
+export type Purchasing = "spot" | "ondemand" | "spot-then-ondemand";
+
+const PURCHASING_VALUES: ReadonlySet<string> = new Set(["spot", "ondemand", "spot-then-ondemand"]);
+
 export const config = {
   get tableName(): string {
     return requireEnv("TABLE_NAME");
@@ -48,6 +52,15 @@ export const config = {
   },
   get instanceTypes(): string[] {
     return csv(process.env["INSTANCE_TYPES"] ?? DEFAULT_INSTANCE_TYPES);
+  },
+  get purchasing(): Purchasing {
+    const raw = process.env["PURCHASING"];
+    if (raw === undefined || raw === "") return "spot";
+    // 誤設定を spot と解釈して起動する事故を防ぐため fail fast にする
+    if (!PURCHASING_VALUES.has(raw)) {
+      throw new Error(`環境変数 PURCHASING の値が不正です: ${raw}`);
+    }
+    return raw as Purchasing;
   },
   get dataVolumeSizeGb(): number {
     return intEnv("DATA_VOLUME_SIZE_GB", 20);

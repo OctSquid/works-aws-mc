@@ -217,7 +217,7 @@ async function onSnapshotEvent(detail: Record<string, unknown>): Promise<void> {
     from: ["SNAPSHOTTING"],
     to: "STOPPED",
     set: { snapshot_id: snapshotId },
-    clear: ["instance_id", "az", "instance_type", "spot_price", "volume_id"],
+    clear: ["instance_id", "az", "instance_type", "purchasing", "spot_price", "volume_id"],
   });
   if (!transition.ok) {
     // 既に STOPPED（重複イベント等）なら通知しない

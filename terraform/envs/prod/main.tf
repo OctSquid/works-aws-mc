@@ -27,6 +27,7 @@ locals {
   server_spec    = jsondecode(file("${path.root}/../../../server.json"))
   architecture   = local.server_spec.ec2.architecture
   instance_types = local.server_spec.ec2.instance_types
+  purchasing     = try(local.server_spec.ec2.purchasing, "spot")
 }
 
 module "network" {
@@ -57,6 +58,7 @@ module "control_plane" {
   server_fqdn           = local.server_fqdn
   instance_types        = local.instance_types
   architecture          = local.architecture
+  purchasing            = local.purchasing
   data_volume_size_gb   = var.data_volume_size_gb
   snapshot_retention    = var.snapshot_retention
   ec2_instance_role_arn = module.server.instance_role_arn

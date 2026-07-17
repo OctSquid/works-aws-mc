@@ -21,6 +21,7 @@
     "mcflags",
     "modrinth",
     "nogui",
+    "ondemand",
     "oxfmt",
     "oxlint",
     "oxlintrc",

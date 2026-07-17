@@ -7,6 +7,7 @@ import {
   EC2Client,
   RunInstancesCommand,
   TerminateInstancesCommand,
+  type RunInstancesCommandInput,
 } from "@aws-sdk/client-ec2";
 import { ChangeResourceRecordSetsCommand, Route53Client } from "@aws-sdk/client-route-53";
 import { DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb";
@@ -122,6 +123,7 @@ describe("/start の候補フォールバック", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     ec2Mock.restore();
     route53Mock.restore();
     ddbMock.restore();
@@ -203,7 +205,7 @@ describe("/start の候補フォールバック", () => {
     });
   });
 
-  it("全候補が失敗したら STOPPED に戻し ondemand を案内する", async () => {
+  it("全候補が失敗したら STOPPED に戻し server.json の purchasing 変更を案内する", async () => {
     ec2Mock.on(RunInstancesCommand).rejects(capacityError("InsufficientInstanceCapacity"));
 
     await handler(START_EVENT);
@@ -215,7 +217,7 @@ describe("/start の候補フォールバック", () => {
     expect(updates.some((u) => u.ExpressionAttributeValues?.[":to"] === "STOPPED")).toBe(true);
 
     const bodies = fetchBodies();
-    expect(bodies.some((b) => b.includes("ondemand"))).toBe(true);
+    expect(bodies.some((b) => b.includes("spot-then-ondemand"))).toBe(true);
   });
 
   it("容量系以外のエラーは即中断し、state を戻してエラー通知する", async () => {
@@ -233,10 +235,63 @@ describe("/start の候補フォールバック", () => {
     expect(bodies.some((b) => b.includes("起動に失敗しました"))).toBe(true);
   });
 
-  it("ondemand:true なら InstanceMarketOptions を付けない", async () => {
+  it("PURCHASING=ondemand ならスポット価格 API を呼ばず設定順×AZ 昇順で起動する", async () => {
+    vi.stubEnv("PURCHASING", "ondemand");
     ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-ok" }] });
 
-    await handler({ ...START_EVENT, options: { ondemand: true } });
+    await handler(START_EVENT);
+
+    // オンデマンド経路はスポット価格履歴に依存しない
+    expect(ec2Mock.commandCalls(DescribeSpotPriceHistoryCommand)).toHaveLength(0);
+
+    const runCalls = ec2Mock.commandCalls(RunInstancesCommand);
+    expect(runCalls).toHaveLength(1);
+    expect(runCalls[0]!.args[0].input).toMatchObject({
+      SubnetId: "subnet-a",
+      InstanceType: "m6g.large",
+    });
+    expect(runCalls[0]!.args[0].input.InstanceMarketOptions).toBeUndefined();
+
+    // DDB には purchasing=ondemand を記録し、spot_price は記録しない
+    const updates = ddbMock.commandCalls(UpdateCommand).map((c) => c.args[0].input);
+    const toRunning = updates.find((u) => u.ExpressionAttributeValues?.[":to"] === "RUNNING");
+    expect(toRunning?.ExpressionAttributeValues).toMatchObject({ ":set_purchasing": "ondemand" });
+    expect(toRunning?.ExpressionAttributeValues?.[":set_spot_price"]).toBeUndefined();
+  });
+
+  it("PURCHASING=spot-then-ondemand: 全スポット候補が容量不足ならオンデマンドへフォールバックする", async () => {
+    vi.stubEnv("PURCHASING", "spot-then-ondemand");
+    ec2Mock.on(RunInstancesCommand).callsFake((input: RunInstancesCommandInput) => {
+      if (input.InstanceMarketOptions) throw capacityError("InsufficientInstanceCapacity");
+      return { Instances: [{ InstanceId: "i-ok" }] };
+    });
+
+    await handler(START_EVENT);
+
+    // スポット3候補が全滅 → オンデマンド1候補目で成功
+    const runCalls = ec2Mock.commandCalls(RunInstancesCommand);
+    expect(runCalls).toHaveLength(4);
+    expect(runCalls[3]!.args[0].input).toMatchObject({
+      SubnetId: "subnet-a",
+      InstanceType: "m6g.large",
+    });
+    expect(runCalls[3]!.args[0].input.InstanceMarketOptions).toBeUndefined();
+
+    const bodies = fetchBodies();
+    expect(bodies.some((b) => b.includes("フォールバック"))).toBe(true);
+
+    const updates = ddbMock.commandCalls(UpdateCommand).map((c) => c.args[0].input);
+    const toRunning = updates.find((u) => u.ExpressionAttributeValues?.[":to"] === "RUNNING");
+    expect(toRunning?.ExpressionAttributeValues).toMatchObject({ ":set_purchasing": "ondemand" });
+    expect(toRunning?.ExpressionAttributeValues?.[":set_spot_price"]).toBeUndefined();
+  });
+
+  it("PURCHASING=spot-then-ondemand: スポット価格履歴が空でもオンデマンドで起動する", async () => {
+    vi.stubEnv("PURCHASING", "spot-then-ondemand");
+    ec2Mock.on(DescribeSpotPriceHistoryCommand).resolves({ SpotPriceHistory: [] });
+    ec2Mock.on(RunInstancesCommand).resolves({ Instances: [{ InstanceId: "i-ok" }] });
+
+    await handler(START_EVENT);
 
     const runCalls = ec2Mock.commandCalls(RunInstancesCommand);
     expect(runCalls).toHaveLength(1);

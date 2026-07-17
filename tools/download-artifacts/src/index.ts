@@ -25,6 +25,14 @@ function validateServerSpec(spec: ServerSpec): void {
       );
     }
   }
+  if (
+    ec2.purchasing !== undefined &&
+    !["spot", "ondemand", "spot-then-ondemand"].includes(ec2.purchasing)
+  ) {
+    throw new Error(
+      'server.json: ec2.purchasing は "spot" / "ondemand" / "spot-then-ondemand" のいずれかを指定してください',
+    );
+  }
 }
 
 const { values } = parseArgs({

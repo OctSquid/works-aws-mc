@@ -1,7 +1,8 @@
-import { config, errorMessage, log } from "../shared/config";
+import { config, errorMessage, log, type Purchasing } from "../shared/config";
 import { editOriginalResponse, sendFollowup } from "../shared/discord";
 import {
   attachDataVolume,
+  buildOndemandCandidates,
   describeInstance,
   fetchSpotCandidates,
   findLatestDataSnapshot,
@@ -14,7 +15,8 @@ import {
   tagStopReason,
   terminateInstance,
   waitForInstance,
-  type SpotCandidate,
+  type LaunchCandidate,
+  type LaunchOptions,
 } from "../shared/ec2";
 import { upsertARecord } from "../shared/route53";
 import { runShellCommand } from "../shared/ssm";
@@ -58,7 +60,7 @@ export const handler = async (event: WorkerPayload): Promise<void> => {
   try {
     switch (event.command) {
       case "start":
-        await handleStart(ctx, event.options ?? {});
+        await handleStart(ctx);
         break;
       case "stop":
         await handleStop(ctx);
@@ -75,23 +77,79 @@ export const handler = async (event: WorkerPayload): Promise<void> => {
     }
   } catch (err) {
     log("error", "worker unhandled error", { command: event.command, error: errorMessage(err) });
-    await editOriginalResponse(
-      applicationId,
-      token,
-      `❌ 処理中にエラーが発生しました: ${errorMessage(err)}`,
-    );
+    // Event Invoke のため、ここで throw すると Lambda が自動再実行してコマンドが
+    // 二重実行される。通知の失敗も含めて必ずここで握り潰す。
+    try {
+      await editOriginalResponse(
+        applicationId,
+        token,
+        `❌ 処理中にエラーが発生しました: ${errorMessage(err)}`,
+      );
+    } catch (notifyErr) {
+      log("error", "failed to notify error to discord", { error: errorMessage(notifyErr) });
+    }
   }
 };
+
+/** 中間経過の通知。Discord 障害で起動処理自体を止めないため、失敗は記録して続行する */
+async function notifyBestEffort(label: string, fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    log("warn", "best-effort notification failed", { label, error: errorMessage(err) });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // /start
 // ---------------------------------------------------------------------------
 
-async function handleStart(
-  ctx: InteractionContext,
-  options: Record<string, unknown>,
-): Promise<void> {
-  const ondemand = options["ondemand"] === true || options["ondemand"] === "true";
+const PURCHASING_LABELS: Record<Purchasing, string> = {
+  spot: "スポット",
+  ondemand: "オンデマンド",
+  "spot-then-ondemand": "スポット（確保できない場合はオンデマンド）",
+};
+
+const EXHAUSTED_MESSAGES: Record<Purchasing, string> = {
+  spot: '❌ スポットインスタンスを確保できませんでした。しばらく待って再試行するか、server.json の `ec2.purchasing` を `"spot-then-ondemand"` に変更してデプロイしてください。',
+  ondemand: "❌ オンデマンドインスタンスを確保できませんでした。しばらく待って再試行してください。",
+  "spot-then-ondemand":
+    "❌ スポット・オンデマンドのいずれでもインスタンスを確保できませんでした。しばらく待って再試行してください。",
+};
+
+/** 候補を順に試し、容量系エラーなら次へフォールバックする。全滅なら undefined */
+async function tryLaunchCandidates(
+  candidates: readonly LaunchCandidate[],
+  ondemand: boolean,
+  dataVolume: LaunchOptions["dataVolume"],
+): Promise<{ instanceId: string; candidate: LaunchCandidate } | undefined> {
+  for (const candidate of candidates) {
+    try {
+      const instanceId = await launchInstance({
+        candidate,
+        launchTemplateId: config.launchTemplateId,
+        ondemand,
+        dataVolume,
+      });
+      return { instanceId, candidate };
+    } catch (err) {
+      if (isRetryableCapacityError(err)) {
+        log("warn", "capacity error, falling back to next candidate", {
+          az: candidate.az,
+          instanceType: candidate.instanceType,
+          ondemand,
+          error: errorMessage(err),
+        });
+        continue;
+      }
+      throw err;
+    }
+  }
+  return undefined;
+}
+
+async function handleStart(ctx: InteractionContext): Promise<void> {
+  const purchasing = config.purchasing;
 
   const takeover = await transitionState({ from: "STOPPED", to: "STARTING" });
   if (!takeover.ok) {
@@ -119,61 +177,67 @@ async function handleStart(
     } else if (!snapshot) {
       notes.push("ℹ️ 既存のワールドデータが見つからないため、新規ワールドとして起動します。");
     }
-    await editOriginalResponse(
-      ctx.applicationId,
-      ctx.token,
-      [`⏳ サーバーを起動しています…（${ondemand ? "オンデマンド" : "スポット"}）`, ...notes].join(
-        "\n",
+    await notifyBestEffort("start-progress", () =>
+      editOriginalResponse(
+        ctx.applicationId,
+        ctx.token,
+        [`⏳ サーバーを起動しています…（${PURCHASING_LABELS[purchasing]}）`, ...notes].join("\n"),
       ),
     );
 
-    let candidates = await fetchSpotCandidates(config.instanceTypes, subnetsByAz);
-    if (orphan) {
-      candidates = candidates.filter((c) => c.az === orphan.az);
-    }
-    if (candidates.length === 0) {
-      throw new Error("利用可能な AZ / インスタンスタイプの候補が見つかりませんでした");
-    }
-    log("info", "spot candidates", {
-      candidates: candidates.map((c) => `${c.az}/${c.instanceType}@$${c.price}`),
-      ondemand,
-    });
+    const dataVolume = orphan
+      ? undefined
+      : { snapshotId: snapshot?.snapshotId, sizeGb: config.dataVolumeSizeGb };
 
-    let chosen: SpotCandidate | undefined;
-    for (const candidate of candidates) {
-      try {
-        instanceId = await launchInstance({
-          candidate,
-          launchTemplateId: config.launchTemplateId,
-          ondemand,
-          dataVolume: orphan
-            ? undefined
-            : { snapshotId: snapshot?.snapshotId, sizeGb: config.dataVolumeSizeGb },
-        });
-        chosen = candidate;
-        break;
-      } catch (err) {
-        if (isRetryableCapacityError(err)) {
-          log("warn", "capacity error, falling back to next candidate", {
-            az: candidate.az,
-            instanceType: candidate.instanceType,
-            error: errorMessage(err),
-          });
-          continue;
-        }
-        throw err;
+    let launched: { instanceId: string; candidate: LaunchCandidate } | undefined;
+    let usedMarket: "spot" | "ondemand" = "spot";
+
+    if (purchasing !== "ondemand") {
+      let candidates = await fetchSpotCandidates(config.instanceTypes, subnetsByAz);
+      if (orphan) {
+        candidates = candidates.filter((c) => c.az === orphan.az);
       }
+      // spot-then-ondemand なら価格履歴が空（候補ゼロ）でもオンデマンドへ進む
+      if (candidates.length === 0 && purchasing === "spot") {
+        throw new Error("利用可能な AZ / インスタンスタイプの候補が見つかりませんでした");
+      }
+      log("info", "spot candidates", {
+        candidates: candidates.map((c) => `${c.az}/${c.instanceType}@$${c.price}`),
+      });
+      launched = await tryLaunchCandidates(candidates, false, dataVolume);
     }
 
-    if (!instanceId || !chosen) {
+    if (!launched && purchasing !== "spot") {
+      if (purchasing === "spot-then-ondemand") {
+        await notifyBestEffort("ondemand-fallback", () =>
+          sendFollowup(
+            ctx.applicationId,
+            ctx.token,
+            "⚠️ スポットを確保できなかったため、オンデマンドにフォールバックします…",
+          ),
+        );
+      }
+      let candidates = buildOndemandCandidates(config.instanceTypes, subnetsByAz);
+      if (orphan) {
+        candidates = candidates.filter((c) => c.az === orphan.az);
+      }
+      if (candidates.length === 0) {
+        throw new Error("利用可能な AZ / インスタンスタイプの候補が見つかりませんでした");
+      }
+      log("info", "ondemand candidates", {
+        candidates: candidates.map((c) => `${c.az}/${c.instanceType}`),
+      });
+      launched = await tryLaunchCandidates(candidates, true, dataVolume);
+      usedMarket = "ondemand";
+    }
+
+    if (!launched) {
       await transitionState({ from: "STARTING", to: "STOPPED", clear: ["instance_id"] });
-      await sendFollowup(
-        ctx.applicationId,
-        ctx.token,
-        "❌ スポットインスタンスを確保できませんでした。しばらく待って再試行するか、`/start ondemand:True` を試してください。",
-      );
+      await sendFollowup(ctx.applicationId, ctx.token, EXHAUSTED_MESSAGES[purchasing]);
       return;
     }
+    instanceId = launched.instanceId;
+    const chosen = launched.candidate;
 
     const info = await waitForInstance(instanceId);
     let volumeId = info.dataVolumeId;
@@ -198,21 +262,33 @@ async function handleStart(
         instance_id: instanceId,
         az: chosen.az,
         instance_type: chosen.instanceType,
-        spot_price: chosen.price,
+        purchasing: usedMarket,
+        ...(usedMarket === "spot" && chosen.price !== undefined
+          ? { spot_price: chosen.price }
+          : {}),
         ...(volumeId ? { volume_id: volumeId } : {}),
       },
       clear: ["snapshot_id"],
     });
 
-    const priceLabel = ondemand ? "オンデマンド" : `$${chosen.price.toFixed(4)}/時（スポット）`;
-    await sendFollowup(
-      ctx.applicationId,
-      ctx.token,
-      [
-        `🚀 サーバー起動中: \`${config.serverFqdn}\` (${info.publicIp})`,
-        `AZ: ${chosen.az} / タイプ: ${chosen.instanceType} / 単価: ${priceLabel}`,
-        "ワールドの読込が完了したら改めて通知されます。",
-      ].join("\n"),
+    const priceLabel =
+      usedMarket === "ondemand"
+        ? purchasing === "spot-then-ondemand"
+          ? "オンデマンド（スポットからフォールバック）"
+          : "オンデマンド"
+        : `$${chosen.price?.toFixed(4) ?? "?"}/時（スポット）`;
+    // 起動は既に成功している。通知失敗で catch に落ちるとインスタンスを
+    // 巻き戻し（terminate）してしまうため、ここはベストエフォートにする。
+    await notifyBestEffort("start-success", () =>
+      sendFollowup(
+        ctx.applicationId,
+        ctx.token,
+        [
+          `🚀 サーバー起動中: \`${config.serverFqdn}\` (${info.publicIp})`,
+          `AZ: ${chosen.az} / タイプ: ${chosen.instanceType} / 単価: ${priceLabel}`,
+          "ワールドの読込が完了したら改めて通知されます。",
+        ].join("\n"),
+      ),
     );
   } catch (err) {
     log("error", "start failed", { error: errorMessage(err), instanceId });
@@ -332,7 +408,10 @@ async function handleStatus(ctx: InteractionContext): Promise<void> {
       if (instance.LaunchTime) {
         lines.push(`稼働時間: ${formatUptime(instance.LaunchTime)}`);
       }
-      if (record.az && record.instance_type) {
+      if (record.purchasing === "ondemand") {
+        lines.push("購入方式: オンデマンド");
+      } else if (record.az && record.instance_type) {
+        // purchasing 未記録の旧レコードはスポットとして扱う（後方互換）
         const price = await getCurrentSpotPrice(record.instance_type, record.az).catch(
           () => undefined,
         );

@@ -26,6 +26,7 @@ locals {
     HOSTED_ZONE_ID      = var.hosted_zone_id
     SERVER_FQDN         = var.server_fqdn
     INSTANCE_TYPES      = join(",", var.instance_types)
+    PURCHASING          = var.purchasing
     DATA_VOLUME_SIZE_GB = tostring(var.data_volume_size_gb)
     SNAPSHOT_RETENTION  = tostring(var.snapshot_retention)
   }

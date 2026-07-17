@@ -26,18 +26,18 @@ Discord の Slash Command で必要な時だけスポットインスタンスを
 
 ## リポジトリ構成
 
-| パス                        | 内容                                                                    |
-| --------------------------- | ----------------------------------------------------------------------- |
-| `server.json`               | Minecraft/Paper バージョン、JVM ヒープ、EC2 の arch・インスタンスタイプ |
-| `plugins.json`              | プラグイン定義（追加はここに 1 エントリ書くだけ）                       |
-| `server-config/`            | サーバー・プラグイン設定、インスタンス上のスクリプト、systemd ユニット  |
-| `tools/download-artifacts/` | server.json/plugins.json を解釈して Paper + プラグインを DL             |
-| `tools/register-commands/`  | Discord Slash Commands 登録                                             |
-| `packer/`                   | AMI ビルド定義                                                          |
-| `lambda/`                   | interactions / command-worker / lifecycle / spot-interruption           |
-| `terraform/bootstrap/`      | 初回手動 apply（state バケット, GitHub OIDC, CI ロール）                |
-| `terraform/envs/prod/`      | 本番環境一式                                                            |
-| `docker/`                   | ローカルテスト環境（本番と同じプロビジョニングスクリプトを使用）        |
+| パス                        | 内容                                                                   |
+| --------------------------- | ---------------------------------------------------------------------- |
+| `server.json`               | Minecraft/Paper バージョン、JVM ヒープ、EC2 の arch・タイプ・購入方式  |
+| `plugins.json`              | プラグイン定義（追加はここに 1 エントリ書くだけ）                      |
+| `server-config/`            | サーバー・プラグイン設定、インスタンス上のスクリプト、systemd ユニット |
+| `tools/download-artifacts/` | server.json/plugins.json を解釈して Paper + プラグインを DL            |
+| `tools/register-commands/`  | Discord Slash Commands 登録                                            |
+| `packer/`                   | AMI ビルド定義                                                         |
+| `lambda/`                   | interactions / command-worker / lifecycle / spot-interruption          |
+| `terraform/bootstrap/`      | 初回手動 apply（state バケット, GitHub OIDC, CI ロール）               |
+| `terraform/envs/prod/`      | 本番環境一式                                                           |
+| `docker/`                   | ローカルテスト環境（本番と同じプロビジョニングスクリプトを使用）       |
 
 ## 初回セットアップ
 
@@ -102,8 +102,8 @@ aws ssm put-parameter --overwrite --name /mc/rcon-password --type SecureString -
 
 | 操作                   | 方法                                                                                                 |
 | ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| サーバー起動           | Discord で `/start`（最も安い AZ×インスタンスタイプのスポットを自動選択）                            |
-| スポット枯渇時         | `/start ondemand:True` でオンデマンド起動（割高。明示指定のみ）                                      |
+| サーバー起動           | Discord で `/start`（スポット時は最も安い AZ×インスタンスタイプを自動選択）                          |
+| スポット枯渇時         | `server.json` の `ec2.purchasing` を `"spot-then-ondemand"` に変更（自動フォールバック）             |
 | サーバー停止           | `/stop`（自動でスナップショットバックアップ）。放置でも 15 分無人で自動停止                          |
 | 状態確認               | `/status`                                                                                            |
 | プラグイン追加・更新   | `plugins.json` を編集して PR → main マージで AMI 自動再ビルド → 次回 `/start` から反映               |

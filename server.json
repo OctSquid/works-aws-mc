@@ -6,6 +6,7 @@
   },
   "ec2": {
     "architecture": "arm64",
-    "instance_types": ["m6g.large", "m7g.large"]
+    "instance_types": ["m6g.large", "m7g.large"],
+    "purchasing": "spot"
   }
 }

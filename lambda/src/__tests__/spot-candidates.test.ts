@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSpotCandidates } from "../shared/ec2";
+import { buildOndemandCandidates, buildSpotCandidates } from "../shared/ec2";
 
 const SUBNETS: Record<string, string> = {
   "ap-northeast-1a": "subnet-a",
@@ -99,5 +99,29 @@ describe("buildSpotCandidates（スポット価格ソート）", () => {
       TYPES,
     );
     expect(candidates).toEqual([]);
+  });
+});
+
+describe("buildOndemandCandidates（オンデマンド候補）", () => {
+  it("INSTANCE_TYPES の設定順 × AZ 名昇順で列挙する（価格 API 非依存）", () => {
+    const candidates = buildOndemandCandidates(TYPES, SUBNETS);
+    expect(candidates.map((c) => `${c.az}/${c.instanceType}`)).toEqual([
+      "ap-northeast-1a/m6g.large",
+      "ap-northeast-1c/m6g.large",
+      "ap-northeast-1d/m6g.large",
+      "ap-northeast-1a/m7g.large",
+      "ap-northeast-1c/m7g.large",
+      "ap-northeast-1d/m7g.large",
+    ]);
+    expect(candidates[0]).toEqual({
+      az: "ap-northeast-1a",
+      instanceType: "m6g.large",
+      subnetId: "subnet-a",
+    });
+    expect(candidates.every((c) => c.price === undefined)).toBe(true);
+  });
+
+  it("サブネットが無ければ空配列を返す", () => {
+    expect(buildOndemandCandidates(TYPES, {})).toEqual([]);
   });
 });

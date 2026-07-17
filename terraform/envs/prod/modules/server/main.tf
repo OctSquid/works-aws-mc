@@ -4,8 +4,9 @@
 # 起動そのものは command-worker Lambda が RunInstances で行う。
 # Launch Template には以下を「あえて書かない」:
 #   - instance_market_options : スポット指定は worker が RunInstances 時に
-#       InstanceMarketOptions で毎回付与する。LT に焼き込むと明示オプション
-#       （/start ondemand:true）でのオンデマンドフォールバックができなくなる
+#       InstanceMarketOptions で毎回付与する。LT に焼き込むと server.json の
+#       ec2.purchasing（ondemand / spot-then-ondemand フォールバック）で
+#       オンデマンド起動ができなくなる
 #   - データボリュームの BDM  : 復元元スナップショット ID が毎回変わるため
 #       worker が RunInstances 時に上書きする（DeleteOnTermination=false,
 #       タグ mc:data=true を worker 側で必ず指定する）

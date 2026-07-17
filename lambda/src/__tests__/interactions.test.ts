@@ -89,7 +89,8 @@ describe("interactions handler", () => {
       token: "tok-abc",
       channel_id: "ch-1",
       member: { user: { username: "steve" } },
-      data: { name: "start", options: [{ name: "ondemand", value: true, type: 5 }] },
+      // オプションの透過を検証する（現在の start コマンド自体はオプションを持たない）
+      data: { name: "start", options: [{ name: "example", value: true, type: 5 }] },
     };
     const res = await handler(signedEvent(interaction));
     expect(res.statusCode).toBe(200);
@@ -103,7 +104,7 @@ describe("interactions handler", () => {
     const payload = JSON.parse(Buffer.from(input.Payload as Uint8Array).toString("utf8"));
     expect(payload).toMatchObject({
       command: "start",
-      options: { ondemand: true },
+      options: { example: true },
       applicationId: "app-123",
       token: "tok-abc",
       invokedBy: "steve",

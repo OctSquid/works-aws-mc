@@ -1,15 +1,7 @@
 [
   {
     "name": "start",
-    "description": "Minecraft サーバーを起動する（最も安いスポットを自動選択）",
-    "options": [
-      {
-        "type": 5,
-        "name": "ondemand",
-        "description": "スポットが確保できない場合にオンデマンドで起動する",
-        "required": false
-      }
-    ]
+    "description": "Minecraft サーバーを起動する"
   },
   {
     "name": "stop",

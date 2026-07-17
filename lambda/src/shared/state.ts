@@ -17,6 +17,8 @@ export interface ServerRecord {
   instance_id?: string;
   az?: string;
   instance_type?: string;
+  /** 実際に使われた購入方式（"spot" | "ondemand"。古いレコードには無い） */
+  purchasing?: string;
   spot_price?: number;
   volume_id?: string;
   snapshot_id?: string;

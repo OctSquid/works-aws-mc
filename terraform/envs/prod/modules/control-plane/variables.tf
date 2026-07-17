@@ -33,6 +33,16 @@ variable "instance_types" {
   }
 }
 
+variable "purchasing" {
+  description = "インスタンスの購入方式（spot-then-ondemand はスポット確保失敗時にオンデマンドへ自動フォールバック）"
+  type        = string
+
+  validation {
+    condition     = contains(["spot", "ondemand", "spot-then-ondemand"], var.purchasing)
+    error_message = "purchasing は spot / ondemand / spot-then-ondemand のいずれかを指定してください。"
+  }
+}
+
 variable "architecture" {
   description = "サーバーの CPU アーキテクチャ（シード AMI の選択に使用。instance_types と整合していること）"
   type        = string

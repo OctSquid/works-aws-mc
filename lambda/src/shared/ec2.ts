@@ -31,13 +31,14 @@ export const DATA_DEVICE_NAME = "/dev/sdf";
 export type StopReason = "manual" | "auto-idle" | "spot";
 
 // ---------------------------------------------------------------------------
-// スポット価格候補
+// 起動候補（AZ × インスタンスタイプ）
 // ---------------------------------------------------------------------------
 
-export interface SpotCandidate {
+export interface LaunchCandidate {
   az: string;
   instanceType: string;
-  price: number;
+  /** スポット候補のみ price を持つ（オンデマンド候補は undefined） */
+  price?: number | undefined;
   subnetId: string;
 }
 
@@ -54,7 +55,7 @@ export function buildSpotCandidates(
   >[],
   subnetsByAz: Record<string, string>,
   instanceTypes: readonly string[],
-): SpotCandidate[] {
+): LaunchCandidate[] {
   const latest = new Map<string, { price: number; timestamp: number }>();
   for (const p of prices) {
     if (!p.AvailabilityZone || !p.InstanceType || !p.SpotPrice) continue;
@@ -69,7 +70,7 @@ export function buildSpotCandidates(
       latest.set(key, { price, timestamp });
     }
   }
-  const candidates: SpotCandidate[] = [];
+  const candidates: LaunchCandidate[] = [];
   for (const [key, { price }] of latest) {
     const [az, instanceType] = key.split("|") as [string, string];
     const subnetId = subnetsByAz[az];
@@ -78,10 +79,30 @@ export function buildSpotCandidates(
   }
   return candidates.sort(
     (a, b) =>
-      a.price - b.price ||
+      (a.price ?? 0) - (b.price ?? 0) ||
       instanceTypes.indexOf(a.instanceType) - instanceTypes.indexOf(b.instanceType) ||
       a.az.localeCompare(b.az),
   );
+}
+
+/**
+ * オンデマンド起動候補を作る（純粋関数・テスト対象）。
+ * スポット価格 API に依存せず、INSTANCE_TYPES の設定順 × AZ 名昇順で列挙する。
+ */
+export function buildOndemandCandidates(
+  instanceTypes: readonly string[],
+  subnetsByAz: Record<string, string>,
+): LaunchCandidate[] {
+  const azs = Object.keys(subnetsByAz).sort();
+  const candidates: LaunchCandidate[] = [];
+  for (const instanceType of instanceTypes) {
+    for (const az of azs) {
+      const subnetId = subnetsByAz[az];
+      if (!subnetId) continue;
+      candidates.push({ az, instanceType, subnetId });
+    }
+  }
+  return candidates;
 }
 
 /** SUBNET_IDS から AZ → サブネットID のマップを作る */
@@ -102,7 +123,7 @@ export async function getSubnetsByAz(
 export async function fetchSpotCandidates(
   instanceTypes: readonly string[],
   subnetsByAz: Record<string, string>,
-): Promise<SpotCandidate[]> {
+): Promise<LaunchCandidate[]> {
   const res = await ec2.send(
     new DescribeSpotPriceHistoryCommand({
       InstanceTypes: instanceTypes as _InstanceType[],
@@ -181,7 +202,7 @@ export async function findOrphanDataVolume(): Promise<
 // ---------------------------------------------------------------------------
 
 export interface LaunchOptions {
-  candidate: SpotCandidate;
+  candidate: LaunchCandidate;
   launchTemplateId: string;
   /** true ならオンデマンド起動（InstanceMarketOptions を付けない） */
   ondemand: boolean;
@@ -237,7 +258,7 @@ export async function launchInstance(options: LaunchOptions): Promise<string> {
     instanceId,
     az: options.candidate.az,
     instanceType: options.candidate.instanceType,
-    spotPrice: options.candidate.price,
+    ...(options.candidate.price !== undefined ? { spotPrice: options.candidate.price } : {}),
     ondemand: options.ondemand,
   });
   return instanceId;
