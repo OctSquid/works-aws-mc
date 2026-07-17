@@ -26,18 +26,38 @@ Discord の Slash Command で必要な時だけスポットインスタンスを
 
 ## リポジトリ構成
 
-| パス                        | 内容                                                                   |
-| --------------------------- | ---------------------------------------------------------------------- |
-| `server.json`               | Minecraft/Paper バージョン、JVM ヒープ、EC2 の arch・タイプ・購入方式  |
-| `plugins.json`              | プラグイン定義（追加はここに 1 エントリ書くだけ）                      |
-| `server/`                   | サーバー・プラグイン設定、インスタンス上のスクリプト、systemd ユニット |
-| `tools/download-artifacts/` | server.json/plugins.json を解釈して Paper + プラグインを DL            |
-| `tools/register-commands/`  | Discord Slash Commands 登録                                            |
-| `packer/`                   | AMI ビルド定義                                                         |
-| `lambda/`                   | interactions / command-worker / lifecycle / spot-interruption          |
-| `terraform/bootstrap/`      | 初回手動 apply（state バケット, GitHub OIDC, CI ロール）               |
-| `terraform/envs/prod/`      | 本番環境一式                                                           |
-| `docker/`                   | ローカルテスト環境（本番と同じプロビジョニングスクリプトを使用）       |
+| パス                        | 内容                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------- |
+| `server.json`               | Minecraft/Paper バージョン、JVM ヒープ、EC2 の arch・タイプ・購入方式、rcon-cli 版数  |
+| `plugins.json`              | プラグイン定義（追加はここに 1 エントリ書くだけ）                                     |
+| `mise.toml`                 | ツールチェーン固定 + **全タスクの入口**（`mise tasks` で一覧）                        |
+| `.env.example`              | ローカル用環境変数の雛形（`.env` にコピーして記入。mise が全タスクに自動注入）        |
+| `server/`                   | サーバー実体: 設定ツリー + ランタイムスクリプト + systemd（`server/README.md` 参照）  |
+| `lambda/`                   | interactions / command-worker / lifecycle / spot-interruption + 共有モジュール        |
+| `lambda/src/commands/`      | **Slash Command 定義の単一ソース**（登録ツールとハンドラ表の両方がここを参照）        |
+| `tools/download-artifacts/` | server.json/plugins.json を解釈して Paper + プラグインを `artifacts/` に DL           |
+| `tools/register-commands/`  | Discord Slash Commands 登録（定義は `lambda/src/commands` から import）               |
+| `packer/`                   | アプリ AMI（mc-server-\*）。`packer/base/` は Java 等を焼いたベース AMI（mc-base-\*） |
+| `terraform/bootstrap/`      | 初回手動 apply（state バケット, GitHub OIDC, CI ロール）                              |
+| `terraform/envs/prod/`      | 本番環境一式                                                                          |
+| `docker/`                   | ローカルテスト環境（本番と同じプロビジョニングスクリプトを使用）                      |
+| `scripts/`                  | セットアップ・診断（`setup-secrets.sh` / `doctor.sh`。mise タスク経由で実行）         |
+| `docs/design.md`            | 当初の要件・詳細設計メモ                                                              |
+
+### タスク一覧（mise）
+
+日常の操作はすべて `mise run <task>` に集約されている（どのディレクトリからでも可）:
+
+| タスク                                              | 内容                                                   |
+| --------------------------------------------------- | ------------------------------------------------------ |
+| `install` / `lint` / `typecheck` / `test` / `build` | npm workspaces 全体の依存・検査・テスト・Lambda ビルド |
+| `docker:up` / `docker:down`                         | ローカル検証サーバー（jar ダウンロードも自動で走る）   |
+| `docker:rcon <cmd>`                                 | ローカルサーバーへ RCON コマンド                       |
+| `tf:plan` / `tf:apply`                              | Terraform（prod）                                      |
+| `packer:validate`                                   | Packer テンプレート検証（app + base）                  |
+| `register`                                          | Slash Commands 登録（`.env` の DISCORD\_\* を使用）    |
+| `setup:secrets`                                     | `.env` の値を SSM Parameter Store へ投入               |
+| `doctor`                                            | セットアップ状態の読み取り専用診断                     |
 
 ## 初回セットアップ
 
@@ -46,6 +66,7 @@ Discord の Slash Command で必要な時だけスポットインスタンスを
 - `mise install`（aws-cli / terraform / packer / node が入る）
 - AWS アカウントと管理者権限、AWS CLI のプロファイル設定
 - [Minecraft EULA](https://aka.ms/MinecraftEULA) への同意（AMI に `eula=true` を焼き込むため）
+- `.env.example` を `.env` にコピーしておく（値は手順 3 で埋める）
 
 ### 1. Terraform bootstrap（手動・1回だけ）
 
@@ -67,12 +88,14 @@ state バケット・GitHub OIDC プロバイダ・CI 用 IAM ロール（`gha-t
      module.dns.aws_route53_zone.this <ZONE_ID>
    ```
 
-### 3. Discord アプリケーション作成
+### 3. Discord アプリケーション作成 → `.env` に記入
 
 1. [Discord Developer Portal](https://discord.com/developers/applications) で New Application
-2. 控える値: **Application ID**、**Public Key**、Bot タブの **Token**
-3. サーバー（ギルド）に Bot を招待（スコープ `applications.commands` のみで可）
-4. 通知用チャンネルで Webhook を作成し URL を控える
+2. サーバー（ギルド）に Bot を招待（スコープ `applications.commands` のみで可）
+3. 通知用チャンネルで Webhook を作成
+4. 取得した値を **`.env` に記入する**（`DISCORD_APPLICATION_ID` / `DISCORD_PUBLIC_KEY` /
+   `DISCORD_BOT_TOKEN` / `DISCORD_GUILD_ID` / `DISCORD_WEBHOOK_URL`。各項目の取得場所は
+   `.env.example` のコメント参照）
 
 ### 4. GitHub リポジトリ設定
 
@@ -81,22 +104,19 @@ state バケット・GitHub OIDC プロバイダ・CI 用 IAM ロール（`gha-t
 
 ### 5. シークレットの投入（SSM Parameter Store）
 
-Terraform はプレースホルダでパラメータを作るので、実値を CLI で投入する:
-
 ```sh
-aws ssm put-parameter --overwrite --name /mc/discord/public-key --type String --value '<PUBLIC_KEY>'
-aws ssm put-parameter --overwrite --name /mc/discord/bot-token --type SecureString --value '<BOT_TOKEN>'
-aws ssm put-parameter --overwrite --name /mc/discord/webhook-url --type SecureString --value '<WEBHOOK_URL>'
-aws ssm put-parameter --overwrite --name /mc/rcon-password --type SecureString --value "$(openssl rand -hex 24)"
+mise run setup:secrets   # .env の値を SSM へ投入（rcon-password は自動生成）
 ```
 
-### 6. デプロイ
+### 6. デプロイと確認
 
 1. main に push → `terraform.yml` が Lambda ビルド + terraform apply
-2. `ami-build.yml` を手動実行（または server.json 等の変更を push）→ AMI ビルド + SSM `/mc/ami-id` 更新
-3. `discord-commands.yml` を手動実行 → Slash Commands 登録
-4. Terraform 出力の `function_url` を Discord Developer Portal の **Interactions Endpoint URL** に設定
+2. `ami-base-build.yml` を手動実行（初回のみ・以降は月次自動）→ ベース AMI 作成
+3. `ami-build.yml` を手動実行（または server.json 等の変更を push）→ AMI ビルド + SSM `/mc/ami-id` 更新
+4. `discord-commands.yml` を手動実行 → Slash Commands 登録
+5. Terraform 出力の `function_url` を Discord Developer Portal の **Interactions Endpoint URL** に設定
    （Discord が PING を送って検証するため、Lambda デプロイ後に行うこと）
+6. `mise run doctor` で全項目が ✓ になることを確認
 
 ## 日常運用
 
@@ -183,14 +203,13 @@ aws ssm send-command --instance-ids "$INSTANCE_ID" \
 ## ローカルテスト
 
 ```sh
-cd tools/download-artifacts && npm install && npm run download   # artifacts/ を生成
-cd ../../docker && docker compose up --build
+mise run docker:up   # jar のダウンロード → ビルド → 起動まで一括
 ```
 
 - Java 版: `localhost` / Bedrock 版: `localhost:19132`
   （Windows の Bedrock 版は loopback 制限の解除が必要: `CheckNetIsolation LoopbackExempt -a -n=Microsoft.MinecraftUWP_8wekyb3d8bbwe`）
-- ワールドは `docker/data/` に永続化される。`docker compose down` →再作成でも残ることを確認できる
-- RCON テスト: `docker compose exec minecraft /opt/minecraft/bin/rcon.sh list`
+- ワールドは `docker/data/` に永続化される。`mise run docker:down` →再作成でも残ることを確認できる
+- RCON テスト: `mise run docker:rcon list`
 - イメージは Alpine ベース（JVM は Temurin JRE 25。本番は Corretto 25 だがともに OpenJDK ビルドで実質同等）。
   musl のため AL2023 の完全再現ではないが、検証の目的は共有プロビジョニングスクリプトと
   Paper の動作確認であり、そこは維持される
@@ -207,10 +226,10 @@ cd ../../docker && docker compose up --build
 リポジトリ全体を [oxlint](https://oxc.rs/docs/guide/usage/linter) / [oxfmt](https://oxc.rs/docs/guide/usage/formatter) で検査・整形する（CI の `lint` ワークフローでも同じチェックが走る）。
 
 ```sh
-npm ci            # リポジトリルートで（初回のみ）
-npm run lint      # oxlint（.oxlintrc.json）
-npm run fmt       # oxfmt で整形（.oxfmtrc.json）
-npm run fmt:check # 整形差分の検査のみ（CI と同じ）
+mise run install   # 初回のみ（npm ci。全ワークスペース共通）
+mise run lint      # oxlint + oxfmt --check
+mise run fmt       # oxfmt で整形
+mise run test      # vitest（lambda + tools）
 ```
 
 ## 障害時リカバリ
@@ -231,14 +250,28 @@ npm run fmt:check # 整形差分の検査のみ（CI と同じ）
 | Packer ビルド用インスタンス (t4g.medium) | ビルド完了時に Packer が terminate（上と同様にしばらく表示は残る）                                                                                            | ビルド中のみ（スポット・数分）    |
 | データ用 EBS ボリューム                  | terminate 後に lifecycle Lambda がスナップショット化 → **削除**。残るのは異常時のみ（データ保全のため意図的に残す）                                           | 稼働中のみ                        |
 | ワールドスナップショット (20GB)          | 停止のたびに1つ作成、**直近 `snapshot_retention` 世代（現在3）を残して自動削除**。毎回別ボリューム由来のため増分にならず、実使用量×世代数で課金される点に注意 | ~$0.05/GB・月 × 実使用量 × 世代数 |
-| AMI                                      | ビルドのたびに作成、**最新2世代を残して自動 deregister**（付随する 8GB スナップショットも削除）                                                               | 実使用 ~3GB × 2世代 ≈ $0.3/月     |
+| アプリ AMI (mc-server-\*)                | ビルドのたびに作成、**最新2世代を残して自動 deregister**（付随する 8GB スナップショットも削除）                                                               | 実使用 ~3GB × 2世代 ≈ $0.3/月     |
+| ベース AMI (mc-base-\*)                  | Java 等の OS レイヤを焼いた土台。月次 / `packer/base/` 変更時のみ再ビルド、**最新1世代のみ保持**                                                              | 実使用 ~2GB × 1世代 ≈ $0.1/月     |
 | Route53 A レコード                       | terminate 時に lifecycle Lambda が削除                                                                                                                        | zone 代のみ                       |
 
 つまり**停止中に残るのは「スナップショット類 + Route53 zone」だけ**（合計 $1〜2/月 程度）。
 コンソールで「インスタンスが溜まっている」ように見えたら、まず State 列が `terminated` かを確認すること。
 
-## コスト管理
+## コスト管理と監視
 
 - AWS Budgets（月 $15、Terraform 変数で変更可）で 80%/100% 時にメール通知
-- 主なコスト: スポット稼働時間（≈$0.06/h）、EBS スナップショット 3 世代、AMI 2 世代、Route53 zone $0.5/月
+- 主なコスト: スポット稼働時間（≈$0.06/h）、EBS スナップショット 3 世代、AMI 計 3 世代、Route53 zone $0.5/月
 - NAT Gateway / Elastic IP / ALB は使わない（これが低コストの前提。追加しないこと）
+- Route53 は年 $6 の固定費だが、IAM でゾーン単位に権限を絞れる・外部 DNS プロバイダの
+  トークン管理が不要という理由で**維持する**と判断済み（無料 DNS への移行は
+  `shared/route53.ts` の差し替えだけで可能な構造にしてある）
+
+### 暴走・失敗の検知（すべてアイドル費用 $0）
+
+- **インスタンス上の idle-watchdog**（15 分無人で自動停止）が第一防衛線
+- **AWS 側の watchdog tick**（EventBridge 30 分周期 → lifecycle Lambda）が最終防衛線:
+  `max_runtime_hours`（デフォルト 12h）超過の強制停止、terminated/snapshot イベントの
+  取りこぼし回復、状態と実態のドリフト修復を行う。watchdog スクリプトが壊れても
+  課金が青天井にならない
+- Lambda の非同期実行がリトライ枯渇で失敗した場合、SNS `mc-ops-alerts` →
+  `budget_email` へメール通知（on_failure destination + エラーアラーム 4 本）

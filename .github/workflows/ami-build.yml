@@ -4,13 +4,20 @@ on:
   push:
     branches: [main]
     paths:
+      # tools/download-artifacts/** は含めない（ダウンローダ自体の変更は lambda-ci で
+      # 検証され、出力が変わるときは server.json / plugins.json も変わるため）
       - server.json
       - plugins.json
       - "server/**"
       - "packer/**"
-      - "tools/download-artifacts/**"
+      - "!packer/base/**" # ベース AMI は ami-base-build.yml が担当
       - .github/workflows/ami-build.yml
   workflow_dispatch:
+    inputs:
+      force_download:
+        description: "jar キャッシュを無視して再ダウンロードする（version: latest の追従用）"
+        type: boolean
+        default: false
 
 permissions:
   id-token: write
@@ -26,13 +33,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # server.json / plugins.json が変わらない限り jar 一式を再利用する。
+      # "latest" 指定の追従が必要なときは workflow_dispatch の force_download を使う
+      - name: Cache downloaded artifacts
+        id: cache-artifacts
+        uses: actions/cache@v5
+        with:
+          path: artifacts
+          key: artifacts-${{ hashFiles('server.json', 'plugins.json') }}
+
       - uses: actions/setup-node@v6
+        if: steps.cache-artifacts.outputs.cache-hit != 'true' || inputs.force_download
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: package-lock.json
 
       - name: Download Paper + plugins
+        if: steps.cache-artifacts.outputs.cache-hit != 'true' || inputs.force_download
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}

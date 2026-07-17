@@ -75,9 +75,11 @@ dir = "terraform/envs/prod"
 run = "terraform apply"
 
 [tasks."packer:validate"]
-description = "Packer テンプレートの検証"
-dir = "packer"
-run = ["packer init .", "packer validate ."]
+description = "Packer テンプレートの検証（app + base）"
+run = [
+  "sh -c 'cd packer && packer init . && packer validate .'",
+  "sh -c 'cd packer/base && packer init . && packer validate .'",
+]
 
 [tasks.register]
 description = "Discord Slash Commands を登録（.env の DISCORD_* を使用）"

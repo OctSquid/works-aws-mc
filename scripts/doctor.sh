@@ -54,6 +54,14 @@ if [ -n "$ami_id" ]; then
   esac
 fi
 
+base_count="$(aws ec2 describe-images --owners self --filters 'Name=name,Values=mc-base-*' \
+  --query 'length(Images)' --output text 2>/dev/null)"
+if [ "${base_count:-0}" != "0" ]; then
+  ok "ベース AMI (mc-base-*): ${base_count} 世代"
+else
+  ng "ベース AMI (mc-base-*) がありません（ami-base-build.yml を実行。無いと ami-build が失敗する）"
+fi
+
 echo
 echo "== Lambda / Function URL =="
 if url="$(aws lambda get-function-url-config --function-name mc-interactions --query FunctionUrl --output text 2>/dev/null)"; then

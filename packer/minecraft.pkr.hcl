@@ -15,11 +15,10 @@ variable "region" {
 locals {
   timestamp = regex_replace(timestamp(), "[- TZ:]", "")
 
-  # server.json が AMI アーキテクチャと rcon-cli バージョンの単一の真実の源
-  # （Terraform / Docker も同じファイルを読む）
-  server_spec      = jsondecode(file("${path.root}/../server.json"))
-  architecture     = local.server_spec.ec2.architecture
-  rcon_cli_version = local.server_spec.tooling.rcon_cli_version
+  # server.json が AMI アーキテクチャの単一の真実の源
+  # （Terraform / Docker / packer/base も同じファイルを読む）
+  server_spec  = jsondecode(file("${path.root}/../server.json"))
+  architecture = local.server_spec.ec2.architecture
 
   # ビルドは本番と同一 arch の安価なスポットインスタンスで行う
   build_instance_types = {
@@ -35,13 +34,15 @@ source "amazon-ebs" "minecraft" {
 
   source_ami_filter {
     filters = {
-      # minimal AMI: SSM Agent / awscli は入っていないため install.sh で追加する
-      name                = "al2023-ami-minimal-2023.*-${local.architecture}"
+      # ベース AMI（packer/base: AL2023 minimal + Java / SSM Agent / awscli /
+      # rcon-cli 焼き込み済み）。dnf を日常ビルドから排除してビルド時間を短縮する。
+      # 存在しない場合は先に ami-base-build.yml を実行すること
+      name                = "mc-base-*"
       root-device-type    = "ebs"
       virtualization-type = "hvm"
     }
     most_recent = true
-    owners      = ["amazon"]
+    owners      = ["self"]
   }
 
   launch_block_device_mappings {
@@ -83,9 +84,8 @@ build {
   }
 
   provisioner "shell" {
-    environment_vars = ["RCON_CLI_VERSION=${local.rcon_cli_version}"]
-    script           = "${path.root}/provision/install.sh"
-    execute_command  = "sudo -E bash '{{ .Path }}'"
+    script          = "${path.root}/provision/install.sh"
+    execute_command = "sudo -E bash '{{ .Path }}'"
   }
 
   # CI が AMI ID を取り出して SSM /mc/ami-id を更新するための出力
