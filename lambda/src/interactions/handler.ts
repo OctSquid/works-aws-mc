@@ -1,7 +1,8 @@
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
-import { config, errorMessage, log } from "../shared/config";
+import { config, errorMessage, log, setLogContext } from "../shared/config";
 import { verifyDiscordSignature } from "../shared/discord";
 import { PARAM_DISCORD_PUBLIC_KEY, getParameter } from "../shared/ssm";
+import type { WorkerPayload } from "../shared/types";
 
 /** Lambda Function URL イベント（必要なフィールドのみ） */
 export interface FunctionUrlEvent {
@@ -32,14 +33,9 @@ interface Interaction {
   user?: { username?: string; global_name?: string };
 }
 
-/** command-worker へ渡すペイロード */
-export interface WorkerPayload {
-  command: string;
-  options: Record<string, unknown>;
-  applicationId: string;
-  token: string;
-  channelId?: string | undefined;
-  invokedBy?: string | undefined;
+/** Lambda の context（必要なフィールドのみ） */
+export interface LambdaContext {
+  awsRequestId?: string;
 }
 
 const lambda = new LambdaClient({});
@@ -88,7 +84,12 @@ function isTimestampFresh(timestamp: string, nowMs: number = Date.now()): boolea
   return Math.abs(nowMs / 1000 - seconds) <= REPLAY_WINDOW_SECONDS;
 }
 
-export const handler = async (event: FunctionUrlEvent): Promise<FunctionUrlResult> => {
+export const handler = async (
+  event: FunctionUrlEvent,
+  context?: LambdaContext,
+): Promise<FunctionUrlResult> => {
+  const requestId = context?.awsRequestId;
+  setLogContext(requestId ? { correlationId: requestId } : {});
   const rawBody = event.isBase64Encoded
     ? Buffer.from(event.body ?? "", "base64").toString("utf8")
     : (event.body ?? "");
@@ -144,6 +145,8 @@ export const handler = async (event: FunctionUrlEvent): Promise<FunctionUrlResul
       token: interaction.token ?? "",
       channelId: interaction.channel_id,
       invokedBy: interaction.member?.user?.username ?? interaction.user?.username,
+      // interactions のリクエスト ID を worker のログにも流して突き合わせ可能にする
+      correlationId: requestId,
     };
     log("info", "dispatching command to worker", {
       command: payload.command,

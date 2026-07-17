@@ -1,13 +1,10 @@
 import { errorMessage, log } from "../shared/config";
-import { sendWebhook } from "../shared/discord";
 import { tagStopReason } from "../shared/ec2";
-import { PARAM_DISCORD_WEBHOOK_URL, getParameter, runShellCommand } from "../shared/ssm";
+import { spotInterruptionNotice } from "../shared/messages";
+import { notifyWebhookBestEffort } from "../shared/notify";
+import { runShellCommand } from "../shared/ssm";
 import { getServerRecord } from "../shared/state";
-
-interface EventBridgeEvent {
-  "detail-type"?: string;
-  detail?: Record<string, unknown>;
-}
+import type { EventBridgeEvent } from "../shared/types";
 
 export const handler = async (event: EventBridgeEvent): Promise<void> => {
   if (event["detail-type"] !== "EC2 Spot Instance Interruption Warning") {
@@ -32,12 +29,7 @@ export const handler = async (event: EventBridgeEvent): Promise<void> => {
   log("info", "spot interruption warning", { instanceId });
 
   // Discord へ即時通知（ベストエフォート）
-  try {
-    const webhookUrl = await getParameter(PARAM_DISCORD_WEBHOOK_URL);
-    await sendWebhook(webhookUrl, "⚠️ スポット中断予告: 約2分後にサーバーが停止します。");
-  } catch (err) {
-    log("error", "failed to send interruption webhook", { error: errorMessage(err) });
-  }
+  await notifyWebhookBestEffort(spotInterruptionNotice());
 
   // 停止理由タグ（lifecycle が通知の文言に使う）
   try {

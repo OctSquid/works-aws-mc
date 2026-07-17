@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "download": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   }
 }

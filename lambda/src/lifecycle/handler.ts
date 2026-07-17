@@ -1,5 +1,4 @@
 import { config, errorMessage, log } from "../shared/config";
-import { sendWebhook } from "../shared/discord";
 import {
   DATA_DEVICE_NAME,
   STOP_REASON_TAG_KEY,
@@ -14,25 +13,22 @@ import {
   tagStopReason,
   terminateInstance,
   waitForVolumeAvailable,
-  type StopReason,
 } from "../shared/ec2";
+import {
+  INSTANCE_GONE_NOTICE,
+  backupCompleteNotice,
+  backupSkippedNotice,
+  maxRuntimeStopNotice,
+  snapshotStartedNotice,
+  stalledStateNotice,
+  volumeDeleteFailedNotice,
+  volumeNotAvailableNotice,
+} from "../shared/messages";
+import { notifyWebhookBestEffort as notify } from "../shared/notify";
 import { deleteARecord } from "../shared/route53";
-import { PARAM_DISCORD_WEBHOOK_URL, getParameter, runShellCommand } from "../shared/ssm";
+import { runShellCommand } from "../shared/ssm";
 import { getServerRecord, transitionState } from "../shared/state";
-
-interface EventBridgeEvent {
-  "detail-type"?: string;
-  detail?: Record<string, unknown>;
-}
-
-async function notify(content: string): Promise<void> {
-  try {
-    const webhookUrl = await getParameter(PARAM_DISCORD_WEBHOOK_URL);
-    await sendWebhook(webhookUrl, content);
-  } catch (err) {
-    log("error", "failed to send webhook notification", { error: errorMessage(err) });
-  }
-}
+import type { EventBridgeEvent } from "../shared/types";
 
 export const handler = async (event: EventBridgeEvent): Promise<void> => {
   const detailType = event["detail-type"];
@@ -62,18 +58,6 @@ export const handler = async (event: EventBridgeEvent): Promise<void> => {
 // ---------------------------------------------------------------------------
 // terminated → スナップショット作成
 // ---------------------------------------------------------------------------
-
-const STOP_MESSAGES: Record<StopReason, string> = {
-  manual: "🛑 サーバーを手動停止しました。",
-  "auto-idle": "🛑 15分間プレイヤー不在のため自動停止しました。",
-  spot: "⚠️ スポット中断により停止しました。",
-  "max-runtime": "⏱️ 最大稼働時間を超えたため強制停止しました。",
-};
-
-function stopMessage(reason: string | undefined): string {
-  if (reason && reason in STOP_MESSAGES) return STOP_MESSAGES[reason as StopReason];
-  return "🛑 サーバーが停止しました（理由: spot または不明）。";
-}
 
 async function onInstanceTerminated(instanceId: string): Promise<void> {
   // 無関係なインスタンスの terminate は無視する
@@ -126,18 +110,14 @@ async function onInstanceTerminated(instanceId: string): Promise<void> {
       to: "STOPPED",
       clear: ["instance_id", "volume_id"],
     }).catch((err) => log("error", "state revert failed", { error: errorMessage(err) }));
-    await notify(
-      `${stopMessage(stopReason)}\n⚠️ データボリュームが見つからなかったため、バックアップは作成されませんでした。`,
-    );
+    await notify(backupSkippedNotice(stopReason));
     return;
   }
 
   // デタッチ完了（available）を最大5分待つ
   const available = await waitForVolumeAvailable(volumeId);
   if (!available) {
-    await notify(
-      `${stopMessage(stopReason)}\n❌ データボリューム (\`${volumeId}\`) が available になりませんでした。次回 \`/start\` 時にこのボリュームを再利用して復旧を試みます。`,
-    );
+    await notify(volumeNotAvailableNotice(stopReason, volumeId));
     await transitionState({
       from: ["RUNNING", "STOPPING", "STARTING"],
       to: "STOPPED",
@@ -158,7 +138,7 @@ async function onInstanceTerminated(instanceId: string): Promise<void> {
     log("warn", "transition to SNAPSHOTTING rejected", { currentState: transition.currentState });
   }
 
-  await notify(`${stopMessage(stopReason)}\n💾 バックアップ（スナップショット）を作成しています…`);
+  await notify(snapshotStartedNotice(stopReason));
 }
 
 // ---------------------------------------------------------------------------
@@ -200,9 +180,7 @@ async function onWatchdogTick(): Promise<void> {
           to: "STOPPED",
           clear: ["instance_id"],
         }).catch((err) => log("error", "state revert failed", { error: errorMessage(err) }));
-        await notify(
-          "⚠️ 記録上は稼働中でしたが、インスタンスが見つかりませんでした。状態を停止済みに戻しました。`/start` で再起動できます。",
-        );
+        await notify(INSTANCE_GONE_NOTICE);
       }
       return;
     }
@@ -214,9 +192,7 @@ async function onWatchdogTick(): Promise<void> {
         instanceId: record.instance_id,
         maxRuntimeHours: config.maxRuntimeHours,
       });
-      await notify(
-        `⏱️ 稼働時間が上限（${config.maxRuntimeHours}時間）を超えたため、サーバーを強制停止します。`,
-      );
+      await notify(maxRuntimeStopNotice(config.maxRuntimeHours));
       try {
         // インスタンス上の graceful shutdown（告知 → save-all → poweroff → terminate）
         await runShellCommand(record.instance_id!, [
@@ -252,9 +228,7 @@ async function onWatchdogTick(): Promise<void> {
   }
 
   log("warn", "state transition stalled", { state: record.state, stalledMs });
-  await notify(
-    `⚠️ 状態 \`${record.state}\` が ${Math.round(stalledMs / 60_000)} 分以上停滞しています。\`/status\` で確認してください（15 分経過後は \`/start\`・\`/stop\` で回復できます）。`,
-  );
+  await notify(stalledStateNotice(record.state, Math.round(stalledMs / 60_000)));
 }
 
 // ---------------------------------------------------------------------------
@@ -300,9 +274,7 @@ async function onSnapshotEvent(detail: Record<string, unknown>): Promise<void> {
       await deleteVolumeIfExists(volumeId);
     } catch (err) {
       log("error", "failed to delete volume", { volumeId, error: errorMessage(err) });
-      await notify(
-        `⚠️ バックアップ後のボリューム削除に失敗しました (\`${volumeId}\`): ${errorMessage(err)}`,
-      );
+      await notify(volumeDeleteFailedNotice(volumeId, errorMessage(err)));
     }
   } else {
     log("warn", "no volume id to delete", { snapshotId });
@@ -332,5 +304,5 @@ async function onSnapshotEvent(detail: Record<string, unknown>): Promise<void> {
     return;
   }
 
-  await notify("✅ バックアップ完了。`/start` で再開できます。");
+  await notify(backupCompleteNotice());
 }

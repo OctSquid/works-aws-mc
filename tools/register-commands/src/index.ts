@@ -1,7 +1,8 @@
 // Discord ギルドコマンドとして Slash Commands を一括登録（PUT = 洗い替え）する。
+// コマンド定義は lambda/src/commands/definitions.ts が単一ソース
+// （worker のハンドラ表と同じ型で結ばれており、登録と実装の乖離は型エラーになる）。
 // 必要な環境変数: DISCORD_APPLICATION_ID, DISCORD_BOT_TOKEN, DISCORD_GUILD_ID
-import { readFile } from "node:fs/promises";
-import path from "node:path";
+import { COMMAND_DEFINITIONS } from "../../../lambda/src/commands/definitions";
 
 const applicationId = process.env.DISCORD_APPLICATION_ID;
 const botToken = process.env.DISCORD_BOT_TOKEN;
@@ -14,10 +15,6 @@ if (!applicationId || !botToken || !guildId) {
   process.exit(1);
 }
 
-const commands = JSON.parse(
-  await readFile(path.join(import.meta.dirname, "commands.json"), "utf8"),
-) as unknown[];
-
 const res = await fetch(
   `https://discord.com/api/v10/applications/${applicationId}/guilds/${guildId}/commands`,
   {
@@ -26,7 +23,7 @@ const res = await fetch(
       authorization: `Bot ${botToken}`,
       "content-type": "application/json",
     },
-    body: JSON.stringify(commands),
+    body: JSON.stringify(COMMAND_DEFINITIONS),
   },
 );
 

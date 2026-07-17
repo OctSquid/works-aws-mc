@@ -28,6 +28,25 @@ export function verifyDiscordSignature(
   }
 }
 
+/** Discord の埋め込み（必要なフィールドのみ。discord.js には依存しない） */
+export interface Embed {
+  title?: string;
+  description?: string;
+  /** 左端のアクセントカラー（0xRRGGBB） */
+  color?: number;
+  fields?: { name: string; value: string; inline?: boolean }[];
+  footer?: { text: string };
+  /** ISO 8601 */
+  timestamp?: string;
+}
+
+/** 送信メッセージ。文字列なら従来どおり plain content として送る */
+export type OutgoingMessage = string | { content?: string; embeds?: Embed[] };
+
+function toMessageBody(message: OutgoingMessage): { content?: string; embeds?: Embed[] } {
+  return typeof message === "string" ? { content: message } : message;
+}
+
 interface DiscordRequestOptions {
   /**
    * 404 を短いバックオフで再試行する。deferred ACK（type:5）の登録が完了する前に
@@ -129,12 +148,12 @@ async function discordRequest(
 export async function editOriginalResponse(
   applicationId: string,
   token: string,
-  content: string,
+  message: OutgoingMessage,
 ): Promise<void> {
   await discordRequest(
     `${DISCORD_API_BASE}/webhooks/${applicationId}/${token}/messages/@original`,
     "PATCH",
-    { content },
+    toMessageBody(message),
     "edit-original",
     // deferred ACK の登録完了前に届くと 404 になるためリトライで吸収する
     { retry404: true },
@@ -145,17 +164,17 @@ export async function editOriginalResponse(
 export async function sendFollowup(
   applicationId: string,
   token: string,
-  content: string,
+  message: OutgoingMessage,
 ): Promise<void> {
   await discordRequest(
     `${DISCORD_API_BASE}/webhooks/${applicationId}/${token}`,
     "POST",
-    { content },
+    toMessageBody(message),
     "followup",
   );
 }
 
 /** Webhook URL（SSM /mc/discord/webhook-url）へ通知を送信する */
-export async function sendWebhook(webhookUrl: string, content: string): Promise<void> {
-  await discordRequest(webhookUrl, "POST", { content }, "webhook");
+export async function sendWebhook(webhookUrl: string, message: OutgoingMessage): Promise<void> {
+  await discordRequest(webhookUrl, "POST", toMessageBody(message), "webhook");
 }

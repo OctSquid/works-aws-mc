@@ -4,7 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - tools/register-commands/src/commands.json
+      - lambda/src/commands/definitions.ts
+      - tools/register-commands/**
       - .github/workflows/discord-commands.yml
   workflow_dispatch:
 

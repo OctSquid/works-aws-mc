@@ -1,31 +1,25 @@
 import { copyFile } from "node:fs/promises";
 import path from "node:path";
 import { downloadFile, fetchJson } from "./http.js";
+import {
+  pickGithubAsset,
+  pickMinecraftVersion,
+  pickModrinthFile,
+  pickModrinthVersion,
+  type ModrinthVersion,
+} from "./selection.js";
 import type { PluginSpec, ServerSpec } from "./types.js";
 
 const FILL_API = "https://fill.papermc.io/v3/projects/paper";
 
-/**
- * server.json の minecraft_version を Fill API 上の具体バージョンに解決する。
- * Fill API の versions は {"26.1": ["26.1.2", "26.1.1"], ...} のようにファミリーでグループ化
- * されているため、"26.1" のようなファミリー指定なら最新の安定版 (rc/pre を除く) を選ぶ。
- */
+/** server.json の minecraft_version を Fill API 上の具体バージョンに解決する */
 async function resolveMinecraftVersion(requested: string): Promise<string> {
   const project = await fetchJson<{ versions: Record<string, string[]> }>(FILL_API);
-  const all = Object.values(project.versions).flat();
-  if (all.includes(requested)) return requested;
-
-  const family = project.versions[requested];
-  if (family) {
-    const stable = family.find((v) => !/-(rc|pre)/.test(v));
-    if (stable) {
-      console.log(`  バージョンファミリー ${requested} -> ${stable} に解決`);
-      return stable;
-    }
+  const version = pickMinecraftVersion(requested, project.versions);
+  if (version !== requested) {
+    console.log(`  バージョンファミリー ${requested} -> ${version} に解決`);
   }
-  throw new Error(
-    `Minecraft version ${requested} not found on PaperMC. available families: ${Object.keys(project.versions).join(", ")}`,
-  );
+  return version;
 }
 
 /** Paper 本体を DL し、解決した「バージョン/ビルド番号」を返す (PaperMC Fill API v3) */
@@ -75,17 +69,12 @@ export async function downloadPlugin(
     }
 
     case "modrinth": {
-      const versions = await fetchJson<
-        { version_number: string; loaders: string[]; files: { url: string; primary: boolean }[] }[]
-      >(
+      const versions = await fetchJson<ModrinthVersion[]>(
         `https://api.modrinth.com/v2/project/${plugin.id}/version?loaders=${encodeURIComponent('["paper","spigot"]')}`,
       );
-      const target =
-        plugin.version === "latest"
-          ? versions[0]
-          : versions.find((v) => v.version_number === plugin.version);
+      const target = pickModrinthVersion(versions, plugin.version);
       if (!target) throw new Error(`Modrinth version ${plugin.version} not found for ${plugin.id}`);
-      const file = target.files.find((f) => f.primary) ?? target.files[0];
+      const file = pickModrinthFile(target);
       if (!file) throw new Error(`Modrinth: no files for ${plugin.id} ${target.version_number}`);
       await downloadFile(file.url, dest);
       return target.version_number;
@@ -101,8 +90,7 @@ export async function downloadPlugin(
         tag_name: string;
         assets: { name: string; browser_download_url: string }[];
       }>(`https://api.github.com/repos/${plugin.repo}/${releasePath}`, headers);
-      const pattern = new RegExp(plugin.assetPattern);
-      const asset = release.assets.find((a) => pattern.test(a.name));
+      const asset = pickGithubAsset(release.assets, plugin.assetPattern);
       if (!asset) {
         throw new Error(
           `GitHub ${plugin.repo}@${release.tag_name}: no asset matching ${plugin.assetPattern}`,

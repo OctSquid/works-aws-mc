@@ -76,12 +76,22 @@ export const config = {
 
 export type LogLevel = "info" | "warn" | "error";
 
+// 全ログ行に自動付与される文脈（相関 ID 等）。interactions → worker の
+// 非同期ホップを correlationId で grep できるようにする
+let logContext: Record<string, unknown> = {};
+
+/** 以降の log() 全行に付与する文脈を設定する（ハンドラ冒頭で呼ぶ） */
+export function setLogContext(context: Record<string, unknown>): void {
+  logContext = context;
+}
+
 export function log(level: LogLevel, message: string, data?: Record<string, unknown>): void {
   console.log(
     JSON.stringify({
       timestamp: new Date().toISOString(),
       level,
       message,
+      ...logContext,
       ...data,
     }),
   );
