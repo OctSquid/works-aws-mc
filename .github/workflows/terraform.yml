@@ -16,6 +16,8 @@ permissions:
 env:
   AWS_REGION: ap-northeast-1
   TF_DIR: terraform/envs/prod
+  # 通知先メールは public リポジトリに載せない（GitHub Variables で管理）
+  TF_VAR_budget_email: ${{ vars.BUDGET_EMAIL }}
 
 jobs:
   terraform:

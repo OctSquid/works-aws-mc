@@ -84,9 +84,10 @@ state バケット・GitHub OIDC プロバイダ・CI 用 IAM ロール（`gha-t
 2. Hosted Zone を Terraform 管理に取り込む:
    ```sh
    cd terraform/envs/prod
-   terraform import -var domain_name=<domain> -var budget_email=<email> \
+   terraform import -var domain_name=<domain> \
      module.dns.aws_route53_zone.this <ZONE_ID>
    ```
+   （`TF_VAR_budget_email` は `.env` から注入される。未設定なら先に `.env` に記入する）
 
 ### 3. Discord アプリケーション作成 → `.env` に記入
 
@@ -99,7 +100,8 @@ state バケット・GitHub OIDC プロバイダ・CI 用 IAM ロール（`gha-t
 
 ### 4. GitHub リポジトリ設定
 
-- Variables: `AWS_ACCOUNT_ID`, `TF_STATE_BUCKET`, `DISCORD_APPLICATION_ID`, `DISCORD_GUILD_ID`
+- Variables: `AWS_ACCOUNT_ID`, `TF_STATE_BUCKET`, `DISCORD_APPLICATION_ID`, `DISCORD_GUILD_ID`,
+  `BUDGET_EMAIL`（通知先メール。public リポジトリのため tfvars ではなくここで管理する）
 - Secrets: `DISCORD_BOT_TOKEN`（CurseForge のプラグインを使う場合は `CURSEFORGE_API_KEY` も）
 
 ### 5. シークレットの投入（SSM Parameter Store）
