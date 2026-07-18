@@ -79,7 +79,9 @@ build {
   provisioner "shell" {
     environment_vars = ["RCON_CLI_VERSION=${local.rcon_cli_version}"]
     script           = "${path.root}/install-base.sh"
-    execute_command  = "sudo -E bash '{{ .Path }}'"
+    # execute_command を上書きする場合、{{ .Vars }} を含めないと
+    # environment_vars がスクリプトへ渡らない（sudo 昇格 + 環境変数注入）
+    execute_command = "chmod +x '{{ .Path }}'; sudo -E sh -c '{{ .Vars }} bash {{ .Path }}'"
   }
 
   post-processor "manifest" {
