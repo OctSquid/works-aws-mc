@@ -7,6 +7,9 @@
 /** interactions → command-worker の非同期 Invoke ペイロード */
 export interface WorkerPayload {
   command?: string;
+  subcommandGroup?: string | undefined;
+  subcommand?: string | undefined;
+  /** サブコマンド階層を降りた後の leaf 引数のフラットな map */
   options?: Record<string, unknown>;
   applicationId?: string;
   token?: string;
@@ -21,6 +24,9 @@ export interface InteractionContext {
   applicationId: string;
   token: string;
   invokedBy?: string | undefined;
+  subcommandGroup?: string | undefined;
+  subcommand?: string | undefined;
+  args: Record<string, string | number | boolean>;
 }
 
 /** EventBridge イベント（必要なフィールドのみ） */

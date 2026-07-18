@@ -129,6 +129,40 @@ describe("interactions handler", () => {
     });
   });
 
+  it("サブコマンドグループの interaction を階層ごと worker へ渡す", async () => {
+    const interaction = {
+      type: 2,
+      application_id: "app-123",
+      token: "tok-abc",
+      member: { user: { username: "steve" } },
+      data: {
+        name: "admin",
+        options: [
+          {
+            type: 2,
+            name: "whitelist",
+            options: [
+              { type: 1, name: "add", options: [{ type: 3, name: "player", value: "alex" }] },
+            ],
+          },
+        ],
+      },
+    };
+    const res = await handler(signedEvent(interaction));
+    expect(JSON.parse(res.body)).toEqual({ type: 5 });
+
+    const calls = lambdaMock.commandCalls(InvokeCommand);
+    const payload = JSON.parse(
+      Buffer.from(calls[0]!.args[0].input.Payload as Uint8Array).toString("utf8"),
+    );
+    expect(payload).toMatchObject({
+      command: "admin",
+      subcommandGroup: "whitelist",
+      subcommand: "add",
+      options: { player: "alex" },
+    });
+  });
+
   it("SSM の公開鍵はキャッシュされる（2回目の呼び出しで GetParameter しない）", async () => {
     await handler(signedEvent({ type: 1 }));
     await handler(signedEvent({ type: 1 }));

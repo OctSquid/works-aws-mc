@@ -209,6 +209,104 @@ export function statusTerminatedWarning(instanceId: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// /admin
+// ---------------------------------------------------------------------------
+
+export function serverNotRunningMessage(state: ServerState | undefined): OutgoingMessage {
+  return {
+    embeds: [
+      {
+        description: `⚠️ サーバーが稼働していないため実行できません（現在: ${stateLabel(state)}）。\`/start\` で起動してください。`,
+        color: COLOR.yellow,
+      },
+    ],
+  };
+}
+
+export function adminResultEmbed(params: {
+  title: string;
+  output: string;
+  ok: boolean;
+}): OutgoingMessage {
+  const output = params.output.trim() || "（出力なし）";
+  return {
+    embeds: [
+      {
+        title: `${params.ok ? "✅" : "❌"} ${params.title}`,
+        description: `\`\`\`\n${output}\n\`\`\``,
+        color: params.ok ? COLOR.green : COLOR.red,
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  };
+}
+
+export function adminBlockedCommandMessage(command: string): string {
+  return `⛔ \`${command}\` はここでは実行できません。サーバー停止は \`/stop\` を使ってください（バックアップと状態管理が正しく行われます）。`;
+}
+
+export function invalidPlayerNameMessage(name: string): string {
+  return `❌ プレイヤー名が不正です: \`${name}\`（英数字とアンダースコア、1〜16文字）`;
+}
+
+// ---------------------------------------------------------------------------
+// /health
+// ---------------------------------------------------------------------------
+
+export function healthEmbed(params: {
+  state: ServerState;
+  players?: string | undefined;
+  tps?: string | undefined;
+  load?: string | undefined;
+  memory?: string | undefined;
+  disk?: string | undefined;
+  warning?: string | undefined;
+}): OutgoingMessage {
+  const fields: { name: string; value: string; inline?: boolean }[] = [];
+  if (params.players) fields.push({ name: "👥 プレイヤー", value: params.players });
+  if (params.tps) fields.push({ name: "⚡ TPS", value: params.tps });
+  if (params.load) fields.push({ name: "🧮 CPU 負荷", value: params.load, inline: true });
+  if (params.memory) fields.push({ name: "🧠 メモリ", value: params.memory, inline: true });
+  if (params.disk) fields.push({ name: "💽 ディスク", value: params.disk, inline: true });
+  return {
+    embeds: [
+      {
+        title: `${STATE_EMOJI[params.state]} ヘルス: ${stateLabel(params.state)}`,
+        ...(params.warning ? { description: params.warning } : {}),
+        color: params.state === "RUNNING" ? COLOR.green : COLOR.yellow,
+        fields,
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  };
+}
+
+export function healthUnavailableMessage(reason: string): string {
+  return `⚠️ ヘルス情報の取得に失敗しました: ${reason}`;
+}
+
+// ---------------------------------------------------------------------------
+// /logs
+// ---------------------------------------------------------------------------
+
+/** embed description 上限 4096 からコードフェンス分を引いた実効上限 */
+export const LOGS_MAX_CONTENT_LENGTH = 3980;
+
+export function logsMessage(lines: number, content: string): OutgoingMessage {
+  const body = content.trimEnd() || "（ログは空です）";
+  return {
+    embeds: [
+      {
+        title: `📜 latest.log（末尾 ${lines} 行）`,
+        description: `\`\`\`\n${body}\n\`\`\``,
+        color: COLOR.grey,
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
 // 共通エラー
 // ---------------------------------------------------------------------------
 

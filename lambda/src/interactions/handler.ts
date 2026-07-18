@@ -1,6 +1,7 @@
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { config, errorMessage, log, setLogContext } from "../shared/config";
 import { verifyDiscordSignature } from "../shared/discord";
+import { parseInteractionOptions, type InteractionDataOption } from "../shared/interaction-options";
 import { PARAM_DISCORD_PUBLIC_KEY, getParameter } from "../shared/ssm";
 import type { WorkerPayload } from "../shared/types";
 
@@ -17,18 +18,12 @@ export interface FunctionUrlResult {
   body: string;
 }
 
-interface InteractionOption {
-  name: string;
-  value?: unknown;
-  type?: number;
-}
-
 interface Interaction {
   type: number;
   application_id?: string;
   token?: string;
   channel_id?: string;
-  data?: { name?: string; options?: InteractionOption[] };
+  data?: { name?: string; options?: InteractionDataOption[] };
   member?: { user?: { username?: string; global_name?: string } };
   user?: { username?: string; global_name?: string };
 }
@@ -134,13 +129,12 @@ export const handler = async (
 
   // APPLICATION_COMMAND → worker を非同期 Invoke して deferred 応答
   if (interaction.type === 2) {
-    const options: Record<string, unknown> = {};
-    for (const opt of interaction.data?.options ?? []) {
-      options[opt.name] = opt.value;
-    }
+    const parsed = parseInteractionOptions(interaction.data?.options);
     const payload: WorkerPayload = {
       command: interaction.data?.name ?? "",
-      options,
+      subcommandGroup: parsed.subcommandGroup,
+      subcommand: parsed.subcommand,
+      options: parsed.args,
       applicationId: interaction.application_id ?? "",
       token: interaction.token ?? "",
       channelId: interaction.channel_id,

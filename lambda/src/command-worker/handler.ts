@@ -9,6 +9,9 @@ import { errorMessage, log, setLogContext } from "../shared/config";
 import { editOriginalResponse } from "../shared/discord";
 import { unknownCommandMessage, workerErrorMessage } from "../shared/messages";
 import type { InteractionContext, WorkerPayload } from "../shared/types";
+import { handleAdmin } from "./admin";
+import { handleHealth } from "./health";
+import { handleLogs } from "./logs";
 import { handleStart } from "./start";
 import { handleStatus } from "./status";
 import { handleStop } from "./stop";
@@ -19,6 +22,9 @@ const COMMANDS: Record<CommandName, CommandHandler> = {
   start: handleStart,
   stop: handleStop,
   status: handleStatus,
+  admin: handleAdmin,
+  health: handleHealth,
+  logs: handleLogs,
 };
 
 export const handler = async (event: WorkerPayload): Promise<void> => {
@@ -32,7 +38,14 @@ export const handler = async (event: WorkerPayload): Promise<void> => {
     log("error", "missing interaction context", {});
     return;
   }
-  const ctx: InteractionContext = { applicationId, token, invokedBy: event.invokedBy };
+  const ctx: InteractionContext = {
+    applicationId,
+    token,
+    invokedBy: event.invokedBy,
+    subcommandGroup: event.subcommandGroup,
+    subcommand: event.subcommand,
+    args: (event.options ?? {}) as Record<string, string | number | boolean>,
+  };
   try {
     if (isKnownCommand(event.command)) {
       await COMMANDS[event.command](ctx);
