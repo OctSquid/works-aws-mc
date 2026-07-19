@@ -17,6 +17,11 @@ export const COLOR = {
   grey: 0x99aab5,
 } as const;
 
+/** 短文通知の共通形: title なし・description のみの embed */
+function notice(description: string, color: number): OutgoingMessage {
+  return { embeds: [{ description, color }] };
+}
+
 // ---------------------------------------------------------------------------
 // 状態
 // ---------------------------------------------------------------------------
@@ -41,8 +46,8 @@ export function stateLabel(state: ServerState | undefined): string {
   return state ? STATE_LABELS[state] : "不明";
 }
 
-export function busyMessage(currentState: ServerState | undefined): string {
-  return `⏳ 既に操作が進行中です（現在: ${stateLabel(currentState)}）`;
+export function busyMessage(currentState: ServerState | undefined): OutgoingMessage {
+  return notice(`⏳ 既に操作が進行中です（現在: ${stateLabel(currentState)}）`, COLOR.yellow);
 }
 
 // ---------------------------------------------------------------------------
@@ -55,15 +60,29 @@ export const PURCHASING_LABELS: Record<Purchasing, string> = {
   "spot-then-ondemand": "スポット（確保できない場合はオンデマンド）",
 };
 
-export const EXHAUSTED_MESSAGES: Record<Purchasing, string> = {
-  spot: '❌ スポットインスタンスを確保できませんでした。しばらく待って再試行するか、server.json の `ec2.purchasing` を `"spot-then-ondemand"` に変更してデプロイしてください。',
-  ondemand: "❌ オンデマンドインスタンスを確保できませんでした。しばらく待って再試行してください。",
-  "spot-then-ondemand":
+export const EXHAUSTED_MESSAGES: Record<Purchasing, OutgoingMessage> = {
+  spot: notice(
+    '❌ スポットインスタンスを確保できませんでした。しばらく待って再試行するか、server.json の `ec2.purchasing` を `"spot-then-ondemand"` に変更してデプロイしてください。',
+    COLOR.red,
+  ),
+  ondemand: notice(
+    "❌ オンデマンドインスタンスを確保できませんでした。しばらく待って再試行してください。",
+    COLOR.red,
+  ),
+  "spot-then-ondemand": notice(
     "❌ スポット・オンデマンドのいずれでもインスタンスを確保できませんでした。しばらく待って再試行してください。",
+    COLOR.red,
+  ),
 };
 
-export function startProgressMessage(purchasing: Purchasing, notes: readonly string[]): string {
-  return [`⏳ サーバーを起動しています…（${PURCHASING_LABELS[purchasing]}）`, ...notes].join("\n");
+export function startProgressMessage(
+  purchasing: Purchasing,
+  notes: readonly string[],
+): OutgoingMessage {
+  return notice(
+    [`⏳ サーバーを起動しています…（${PURCHASING_LABELS[purchasing]}）`, ...notes].join("\n"),
+    COLOR.blurple,
+  );
 }
 
 export function orphanVolumeNote(volumeId: string, az: string): string {
@@ -76,8 +95,16 @@ export const NEW_WORLD_NOTE =
 export const ONDEMAND_FALLBACK_NOTE =
   "⚠️ スポットを確保できなかったため、オンデマンドにフォールバックします…";
 
-export function doubleLaunchAbortMessage(instanceId: string): string {
-  return `⚠️ 既に稼働中/起動中のインスタンス (\`${instanceId}\`) が見つかったため、二重起動を防ぐため起動を中止しました。\`/status\` で状態を確認してください。`;
+/** ONDEMAND_FALLBACK_NOTE を単独 followup として送るときの embed 版 */
+export function ondemandFallbackNotice(): OutgoingMessage {
+  return notice(ONDEMAND_FALLBACK_NOTE, COLOR.yellow);
+}
+
+export function doubleLaunchAbortMessage(instanceId: string): OutgoingMessage {
+  return notice(
+    `⚠️ 既に稼働中/起動中のインスタンス (\`${instanceId}\`) が見つかったため、二重起動を防ぐため起動を中止しました。\`/status\` で状態を確認してください。`,
+    COLOR.yellow,
+  );
 }
 
 export function priceLabel(
@@ -149,16 +176,24 @@ export function startFailedMessage(reason: string): OutgoingMessage {
 // /stop
 // ---------------------------------------------------------------------------
 
-export const STOP_STARTED_MESSAGE = "🛑 停止処理を開始しました。バックアップ完了後に通知します。";
+export const STOP_STARTED_MESSAGE: OutgoingMessage = notice(
+  "🛑 停止処理を開始しました。バックアップ完了後に通知します。",
+  COLOR.blurple,
+);
 
-export const STOP_NO_INSTANCE_MESSAGE =
-  "⚠️ 稼働中のインスタンスが記録されていませんでした。状態を停止済みに戻しました。";
+export const STOP_NO_INSTANCE_MESSAGE: OutgoingMessage = notice(
+  "⚠️ 稼働中のインスタンスが記録されていませんでした。状態を停止済みに戻しました。",
+  COLOR.yellow,
+);
 
 // ---------------------------------------------------------------------------
 // /status
 // ---------------------------------------------------------------------------
 
-export const STATUS_STOPPED_MESSAGE = "💤 サーバーは停止中です。`/start` で起動できます。";
+export const STATUS_STOPPED_MESSAGE: OutgoingMessage = notice(
+  "💤 サーバーは停止中です。`/start` で起動できます。",
+  COLOR.grey,
+);
 
 export function statusEmbed(params: {
   state: ServerState;
@@ -213,14 +248,10 @@ export function statusTerminatedWarning(instanceId: string): string {
 // ---------------------------------------------------------------------------
 
 export function serverNotRunningMessage(state: ServerState | undefined): OutgoingMessage {
-  return {
-    embeds: [
-      {
-        description: `⚠️ サーバーが稼働していないため実行できません（現在: ${stateLabel(state)}）。\`/start\` で起動してください。`,
-        color: COLOR.yellow,
-      },
-    ],
-  };
+  return notice(
+    `⚠️ サーバーが稼働していないため実行できません（現在: ${stateLabel(state)}）。\`/start\` で起動してください。`,
+    COLOR.yellow,
+  );
 }
 
 export function adminResultEmbed(params: {
@@ -241,12 +272,18 @@ export function adminResultEmbed(params: {
   };
 }
 
-export function adminBlockedCommandMessage(command: string): string {
-  return `⛔ \`${command}\` はここでは実行できません。サーバー停止は \`/stop\` を使ってください（バックアップと状態管理が正しく行われます）。`;
+export function adminBlockedCommandMessage(command: string): OutgoingMessage {
+  return notice(
+    `⛔ \`${command}\` はここでは実行できません。サーバー停止は \`/stop\` を使ってください（バックアップと状態管理が正しく行われます）。`,
+    COLOR.red,
+  );
 }
 
-export function invalidPlayerNameMessage(name: string): string {
-  return `❌ プレイヤー名が不正です: \`${name}\`（英数字とアンダースコア、1〜16文字）`;
+export function invalidPlayerNameMessage(name: string): OutgoingMessage {
+  return notice(
+    `❌ プレイヤー名が不正です: \`${name}\`（英数字とアンダースコア、1〜16文字）`,
+    COLOR.red,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -310,12 +347,17 @@ export function logsMessage(lines: number, content: string): OutgoingMessage {
 // 共通エラー
 // ---------------------------------------------------------------------------
 
-export function workerErrorMessage(reason: string): string {
-  return `❌ 処理中にエラーが発生しました: ${reason}`;
+export function workerErrorMessage(reason: string): OutgoingMessage {
+  return notice(`❌ 処理中にエラーが発生しました: ${reason}`, COLOR.red);
 }
 
-export function unknownCommandMessage(command: string | undefined): string {
-  return `❓ 不明なコマンドです: ${command ?? "(なし)"}`;
+export function unknownCommandMessage(command: string | undefined): OutgoingMessage {
+  return notice(`❓ 不明なコマンドです: ${command ?? "(なし)"}`, COLOR.red);
+}
+
+/** interactions 側で worker の Invoke 自体に失敗したときの即時応答 */
+export function workerDispatchFailedMessage(reason: string): OutgoingMessage {
+  return notice(`❌ コマンドの受付に失敗しました: ${reason}`, COLOR.red);
 }
 
 // ---------------------------------------------------------------------------
@@ -335,54 +377,38 @@ export function stopMessage(reason: string | undefined): string {
 }
 
 export function snapshotStartedNotice(stopReason: string | undefined): OutgoingMessage {
-  return {
-    embeds: [
-      {
-        description: `${stopMessage(stopReason)}\n💾 バックアップ（スナップショット）を作成しています…`,
-        color: COLOR.blurple,
-      },
-    ],
-  };
+  return notice(
+    `${stopMessage(stopReason)}\n💾 バックアップ（スナップショット）を作成しています…`,
+    COLOR.blurple,
+  );
 }
 
 export function backupSkippedNotice(stopReason: string | undefined): OutgoingMessage {
-  return {
-    embeds: [
-      {
-        description: `${stopMessage(stopReason)}\n⚠️ データボリュームが見つからなかったため、バックアップは作成されませんでした。`,
-        color: COLOR.red,
-      },
-    ],
-  };
+  return notice(
+    `${stopMessage(stopReason)}\n⚠️ データボリュームが見つからなかったため、バックアップは作成されませんでした。`,
+    COLOR.red,
+  );
 }
 
 export function volumeNotAvailableNotice(
   stopReason: string | undefined,
   volumeId: string,
 ): OutgoingMessage {
-  return {
-    embeds: [
-      {
-        description: `${stopMessage(stopReason)}\n❌ データボリューム (\`${volumeId}\`) が available になりませんでした。次回 \`/start\` 時にこのボリュームを再利用して復旧を試みます。`,
-        color: COLOR.red,
-      },
-    ],
-  };
+  return notice(
+    `${stopMessage(stopReason)}\n❌ データボリューム (\`${volumeId}\`) が available になりませんでした。次回 \`/start\` 時にこのボリュームを再利用して復旧を試みます。`,
+    COLOR.red,
+  );
 }
 
-export function volumeDeleteFailedNotice(volumeId: string, reason: string): string {
-  return `⚠️ バックアップ後のボリューム削除に失敗しました (\`${volumeId}\`): ${reason}`;
+export function volumeDeleteFailedNotice(volumeId: string, reason: string): OutgoingMessage {
+  return notice(
+    `⚠️ バックアップ後のボリューム削除に失敗しました (\`${volumeId}\`): ${reason}`,
+    COLOR.yellow,
+  );
 }
 
 export function backupCompleteNotice(): OutgoingMessage {
-  return {
-    embeds: [
-      {
-        description: "✅ バックアップ完了。`/start` で再開できます。",
-        color: COLOR.green,
-      },
-    ],
-  };
+  return notice("✅ バックアップ完了。`/start` で再開できます。", COLOR.green);
 }
 
 // ---------------------------------------------------------------------------
@@ -390,30 +416,24 @@ export function backupCompleteNotice(): OutgoingMessage {
 // ---------------------------------------------------------------------------
 
 export function maxRuntimeStopNotice(maxRuntimeHours: number): OutgoingMessage {
-  return {
-    embeds: [
-      {
-        description: `⏱️ 稼働時間が上限（${maxRuntimeHours}時間）を超えたため、サーバーを強制停止します。`,
-        color: COLOR.yellow,
-      },
-    ],
-  };
+  return notice(
+    `⏱️ 稼働時間が上限（${maxRuntimeHours}時間）を超えたため、サーバーを強制停止します。`,
+    COLOR.yellow,
+  );
 }
 
-export const INSTANCE_GONE_NOTICE =
-  "⚠️ 記録上は稼働中でしたが、インスタンスが見つかりませんでした。状態を停止済みに戻しました。`/start` で再起動できます。";
+export const INSTANCE_GONE_NOTICE: OutgoingMessage = notice(
+  "⚠️ 記録上は稼働中でしたが、インスタンスが見つかりませんでした。状態を停止済みに戻しました。`/start` で再起動できます。",
+  COLOR.yellow,
+);
 
-export function stalledStateNotice(state: ServerState, stalledMinutes: number): string {
-  return `⚠️ 状態 \`${state}\` が ${stalledMinutes} 分以上停滞しています。\`/status\` で確認してください（15 分経過後は \`/start\`・\`/stop\` で回復できます）。`;
+export function stalledStateNotice(state: ServerState, stalledMinutes: number): OutgoingMessage {
+  return notice(
+    `⚠️ 状態 \`${state}\` が ${stalledMinutes} 分以上停滞しています。\`/status\` で確認してください（15 分経過後は \`/start\`・\`/stop\` で回復できます）。`,
+    COLOR.yellow,
+  );
 }
 
 export function spotInterruptionNotice(): OutgoingMessage {
-  return {
-    embeds: [
-      {
-        description: "⚠️ スポット中断予告: 約2分後にサーバーが停止します。",
-        color: COLOR.yellow,
-      },
-    ],
-  };
+  return notice("⚠️ スポット中断予告: 約2分後にサーバーが停止します。", COLOR.yellow);
 }

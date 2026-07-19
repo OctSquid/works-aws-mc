@@ -129,6 +129,24 @@ describe("interactions handler", () => {
     });
   });
 
+  it("worker の Invoke に失敗したら {type:4} の embed エラーで即時応答する", async () => {
+    lambdaMock.on(InvokeCommand).rejects(new Error("boom"));
+    const interaction = {
+      type: 2,
+      application_id: "app-123",
+      token: "tok-abc",
+      member: { user: { username: "steve" } },
+      data: { name: "start" },
+    };
+    const res = await handler(signedEvent(interaction));
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.type).toBe(4);
+    expect(body.data.content).toBeUndefined();
+    expect(body.data.embeds).toHaveLength(1);
+    expect(body.data.embeds[0].description).toContain("コマンドの受付に失敗しました");
+  });
+
   it("サブコマンドグループの interaction を階層ごと worker へ渡す", async () => {
     const interaction = {
       type: 2,

@@ -19,6 +19,8 @@ function response(status: number, body = "", headers: Record<string, string> = {
 
 const fetchMock = vi.fn<() => Promise<MockResponse>>();
 
+const MSG = { embeds: [{ description: "hi" }] };
+
 describe("discordRequest のリトライ", () => {
   beforeEach(() => {
     fetchMock.mockReset();
@@ -37,7 +39,7 @@ describe("discordRequest のリトライ", () => {
       .mockResolvedValueOnce(response(404))
       .mockResolvedValueOnce(response(200));
 
-    const promise = editOriginalResponse("app", "tok", "hi");
+    const promise = editOriginalResponse("app", "tok", MSG);
     await vi.runAllTimersAsync();
     await promise;
 
@@ -47,7 +49,7 @@ describe("discordRequest のリトライ", () => {
   it("followup の 404 は再試行せず即 throw する", async () => {
     fetchMock.mockResolvedValue(response(404));
 
-    const promise = sendFollowup("app", "tok", "hi").catch((err: unknown) => err);
+    const promise = sendFollowup("app", "tok", MSG).catch((err: unknown) => err);
     await vi.runAllTimersAsync();
     const result = await promise;
 
@@ -61,7 +63,7 @@ describe("discordRequest のリトライ", () => {
       .mockResolvedValueOnce(response(429, JSON.stringify({ retry_after: 0.5 })))
       .mockResolvedValueOnce(response(200));
 
-    const promise = sendFollowup("app", "tok", "hi");
+    const promise = sendFollowup("app", "tok", MSG);
     await vi.advanceTimersByTimeAsync(499);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
@@ -76,7 +78,7 @@ describe("discordRequest のリトライ", () => {
       .mockResolvedValueOnce(response(503))
       .mockResolvedValueOnce(response(200));
 
-    const promise = sendFollowup("app", "tok", "hi");
+    const promise = sendFollowup("app", "tok", MSG);
     await vi.runAllTimersAsync();
     await promise;
 
@@ -86,7 +88,7 @@ describe("discordRequest のリトライ", () => {
   it("ネットワークエラーも再試行する", async () => {
     fetchMock.mockRejectedValueOnce(new Error("ECONNRESET")).mockResolvedValueOnce(response(200));
 
-    const promise = sendFollowup("app", "tok", "hi");
+    const promise = sendFollowup("app", "tok", MSG);
     await vi.runAllTimersAsync();
     await promise;
 
@@ -96,7 +98,7 @@ describe("discordRequest のリトライ", () => {
   it("リトライ枯渇時は throw する（握り潰さない）", async () => {
     fetchMock.mockResolvedValue(response(500));
 
-    const promise = sendFollowup("app", "tok", "hi").catch((err: unknown) => err);
+    const promise = sendFollowup("app", "tok", MSG).catch((err: unknown) => err);
     await vi.runAllTimersAsync();
     const result = await promise;
 
@@ -109,7 +111,7 @@ describe("discordRequest のリトライ", () => {
   it("400 系（429/対象 404 以外）は即 throw する", async () => {
     fetchMock.mockResolvedValue(response(400, '{"message":"bad request"}'));
 
-    const promise = editOriginalResponse("app", "tok", "hi").catch((err: unknown) => err);
+    const promise = editOriginalResponse("app", "tok", MSG).catch((err: unknown) => err);
     await vi.runAllTimersAsync();
     const result = await promise;
 

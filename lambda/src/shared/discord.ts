@@ -40,12 +40,8 @@ export interface Embed {
   timestamp?: string;
 }
 
-/** 送信メッセージ。文字列なら従来どおり plain content として送る */
-export type OutgoingMessage = string | { content?: string; embeds?: Embed[] };
-
-function toMessageBody(message: OutgoingMessage): { content?: string; embeds?: Embed[] } {
-  return typeof message === "string" ? { content: message } : message;
-}
+/** 送信メッセージ。表示は embed に統一する（plain content は送らない） */
+export type OutgoingMessage = { embeds: Embed[] };
 
 interface DiscordRequestOptions {
   /**
@@ -153,7 +149,7 @@ export async function editOriginalResponse(
   await discordRequest(
     `${DISCORD_API_BASE}/webhooks/${applicationId}/${token}/messages/@original`,
     "PATCH",
-    toMessageBody(message),
+    message,
     "edit-original",
     // deferred ACK の登録完了前に届くと 404 になるためリトライで吸収する
     { retry404: true },
@@ -169,12 +165,12 @@ export async function sendFollowup(
   await discordRequest(
     `${DISCORD_API_BASE}/webhooks/${applicationId}/${token}`,
     "POST",
-    toMessageBody(message),
+    message,
     "followup",
   );
 }
 
 /** Webhook URL（SSM /mc/discord/webhook-url）へ通知を送信する */
 export async function sendWebhook(webhookUrl: string, message: OutgoingMessage): Promise<void> {
-  await discordRequest(webhookUrl, "POST", toMessageBody(message), "webhook");
+  await discordRequest(webhookUrl, "POST", message, "webhook");
 }

@@ -2,6 +2,7 @@ import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { config, errorMessage, log, setLogContext } from "../shared/config";
 import { verifyDiscordSignature } from "../shared/discord";
 import { parseInteractionOptions, type InteractionDataOption } from "../shared/interaction-options";
+import { workerDispatchFailedMessage } from "../shared/messages";
 import { PARAM_DISCORD_PUBLIC_KEY, getParameter } from "../shared/ssm";
 import type { WorkerPayload } from "../shared/types";
 
@@ -158,7 +159,7 @@ export const handler = async (
       log("error", "failed to invoke worker", { error: errorMessage(err) });
       return respond(200, {
         type: 4,
-        data: { content: `❌ コマンドの受付に失敗しました: ${errorMessage(err)}` },
+        data: workerDispatchFailedMessage(errorMessage(err)),
       });
     }
     // type 5 = DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE

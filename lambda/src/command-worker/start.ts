@@ -19,10 +19,10 @@ import {
 import {
   EXHAUSTED_MESSAGES,
   NEW_WORLD_NOTE,
-  ONDEMAND_FALLBACK_NOTE,
   busyMessage,
   degradedStartMessage,
   doubleLaunchAbortMessage,
+  ondemandFallbackNotice,
   orphanVolumeNote,
   priceLabel,
   startFailedMessage,
@@ -151,7 +151,7 @@ async function acquireInstance(
 
   if (purchasing === "spot-then-ondemand") {
     await notifyBestEffort("ondemand-fallback", () =>
-      sendFollowup(ctx.applicationId, ctx.token, ONDEMAND_FALLBACK_NOTE),
+      sendFollowup(ctx.applicationId, ctx.token, ondemandFallbackNotice()),
     );
   }
   let candidates = buildOndemandCandidates(config.instanceTypes, source.subnetsByAz);

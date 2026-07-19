@@ -3,7 +3,7 @@
  * Discord 側の default_member_permissions で管理者に限定される前提だが、
  * player 引数の検証と stop 等のブロックは Lambda 側でも行う（defense in depth）。
  */
-import { editOriginalResponse } from "../shared/discord";
+import { editOriginalResponse, type OutgoingMessage } from "../shared/discord";
 import {
   adminBlockedCommandMessage,
   adminResultEmbed,
@@ -18,10 +18,10 @@ import {
   runRcon,
 } from "./rcon";
 
-/** サブコマンドから Minecraft コンソールコマンドを組み立てる。不正入力はエラー文字列で返す */
+/** サブコマンドから Minecraft コンソールコマンドを組み立てる。不正入力はエラーメッセージで返す */
 export function buildAdminCommand(
   ctx: Pick<InteractionContext, "subcommandGroup" | "subcommand" | "args">,
-): { command: string; title: string } | { error: string } {
+): { command: string; title: string } | { error: OutgoingMessage } {
   const player = typeof ctx.args["player"] === "string" ? ctx.args["player"] : undefined;
   const requirePlayer = (): string | undefined => {
     if (player === undefined || !isValidPlayerName(player)) return player ?? "(未指定)";
