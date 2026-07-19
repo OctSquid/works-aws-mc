@@ -32,7 +32,7 @@ if [ -z "$PLAYERS" ]; then
   echo "idle check: rcon unreachable count=$COUNT/$IDLE_LIMIT"
   if [ "$COUNT" -ge "$IDLE_LIMIT" ]; then
     echo "rcon unreachable limit reached; shutting down"
-    /opt/minecraft/bin/notify-discord.sh "⚠️ RCON に${IDLE_LIMIT}分間応答がないため、サーバーを自動停止します。" || true
+    /opt/minecraft/bin/notify-discord.sh "⚠️ RCON に${IDLE_LIMIT}分間応答がないため、サーバーを自動停止します。" yellow || true
     /opt/minecraft/bin/mc-shutdown.sh auto-idle --fast
   fi
   exit 0

@@ -4,11 +4,11 @@ set -euo pipefail
 
 for _ in $(seq 1 120); do
   if /opt/minecraft/bin/rcon.sh list >/dev/null 2>&1; then
-    /opt/minecraft/bin/notify-discord.sh "✅ ワールドの読み込みが完了しました。サーバーに接続できます！"
+    /opt/minecraft/bin/notify-discord.sh "✅ ワールドの読み込みが完了しました。サーバーに接続できます！" green
     exit 0
   fi
   sleep 5
 done
 
-/opt/minecraft/bin/notify-discord.sh "⚠️ サーバープロセスは起動しましたが、10分以内にワールド読み込みが完了しませんでした。ログの確認が必要です。"
+/opt/minecraft/bin/notify-discord.sh "⚠️ サーバープロセスは起動しましたが、10分以内にワールド読み込みが完了しませんでした。ログの確認が必要です。" yellow
 exit 1
